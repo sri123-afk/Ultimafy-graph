@@ -1,0 +1,14 @@
+Ultima-Graph
+Copyright (c) 2026 Ultima-Graph Contributors
+
+This project incorporates architectural patterns, operational workflows, and integration interfaces inspired by the following open-source works:
+
+1. CodeGraph
+   Repository: https://github.com/colbymchenry/codegraph
+   Copyright (c) 2026 Colby Mchenry
+   License: MIT License
+
+2. Graphify
+   Repository: https://github.com/Graphify-Labs/graphify
+   Copyright (c) 2026 Safi Shamsi / Graphify Labs
+   License: Apache License 2.0 / MIT License

@@ -1,0 +1,56 @@
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Python Caches & Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+
+# Agent Runtime & Graph Analysis Outputs
+.ultima/
+topology-out/
+graphify-out/
+*.log
+tmp/
+
+# Secrets & Environment Variables
+.env
+.env.*
+*.pem
+*.key
+*.cert
+
+# Editor & IDE metadata
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
