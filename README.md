@@ -49,7 +49,7 @@ cp -r ultima-graph .agents/skills/
 Run this command inside your project directory to download and unpack the latest release:
 
 ```bash
-curl -fsSL https://github.com/Ultimafy-graph/ultima-graph/releases/latest/download/ultima-graph.tar.gz | tar -xz -C .agents/skills/
+curl -fsSL https://github.com/sri123-afk/Ultimafy-graph/releases/latest/download/ultima-graph.tar.gz | tar -xz -C .agents/skills/
 ```
 
 ### Method 3: Packaged Skill Bundle
