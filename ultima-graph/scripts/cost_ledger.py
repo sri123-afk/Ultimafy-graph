@@ -2,11 +2,13 @@
 """
 cost_ledger.py - Session Cost and Evidence Ledger for ultima-graph.
 Standard library only. Tracks task costs, rung escalations, files read vs avoided,
-and token metrics. Writes to .ultima/ledger.jsonl.
+and token metrics. Uses cryptographic SHA-256 hash chaining for tamper-evident
+audit trails. Writes to .ultima/ledger.jsonl.
 """
 
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -15,6 +17,7 @@ from pathlib import Path
 
 DEFAULT_LEDGER_DIR = Path(".ultima")
 DEFAULT_LEDGER_FILE = DEFAULT_LEDGER_DIR / "ledger.jsonl"
+GENESIS_HASH = "0" * 64
 
 
 def ensure_ledger_dir(ledger_path: Path) -> Path:
@@ -22,11 +25,43 @@ def ensure_ledger_dir(ledger_path: Path) -> Path:
     return ledger_path
 
 
+def compute_entry_hash(entry_data: dict, prev_hash: str) -> str:
+    """Calculate deterministic SHA-256 hash chaining from previous entry."""
+    serialized = json.dumps(entry_data, sort_keys=True, ensure_ascii=False)
+    hasher = hashlib.sha256()
+    hasher.update(prev_hash.encode("utf-8"))
+    hasher.update(serialized.encode("utf-8"))
+    return hasher.hexdigest()
+
+
+def get_last_entry_hash(ledger_path: Path) -> str:
+    """Read the hash of the last entry in the ledger."""
+    if not ledger_path.exists():
+        return GENESIS_HASH
+
+    last_line = ""
+    with open(ledger_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                last_line = line.strip()
+
+    if not last_line:
+        return GENESIS_HASH
+
+    try:
+        last_obj = json.loads(last_line)
+        return last_obj.get("entry_hash", GENESIS_HASH)
+    except json.JSONDecodeError:
+        return GENESIS_HASH
+
+
 def cmd_record(args: argparse.Namespace) -> None:
     ledger_path = Path(args.ledger_path)
     ensure_ledger_dir(ledger_path)
 
-    entry = {
+    prev_hash = get_last_entry_hash(ledger_path)
+
+    payload = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "task_name": args.task,
         "rung": args.rung,
@@ -39,10 +74,74 @@ def cmd_record(args: argparse.Namespace) -> None:
         "notes": args.notes or "",
     }
 
-    with open(ledger_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    entry_hash = compute_entry_hash(payload, prev_hash)
 
-    print(f"Recorded task: {args.task} [Rung: {args.rung}] -> {ledger_path}")
+    full_entry = {
+        **payload,
+        "prev_hash": prev_hash,
+        "entry_hash": entry_hash,
+    }
+
+    with open(ledger_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(full_entry, ensure_ascii=False) + "\n")
+
+    print(f"Recorded task: {args.task} [Rung: {args.rung}] [Hash: {entry_hash[:8]}...] -> {ledger_path}")
+
+
+def cmd_verify(args: argparse.Namespace) -> None:
+    """Verify cryptographic hash-chain integrity of the ledger file."""
+    ledger_path = Path(args.ledger_path)
+    if not ledger_path.exists():
+        print(f"Ledger file not found at {ledger_path}. Nothing to verify.")
+        return
+
+    expected_prev = GENESIS_HASH
+    line_number = 0
+    corrupted = False
+
+    with open(ledger_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line_str = line.strip()
+            if not line_str:
+                continue
+            line_number += 1
+            try:
+                entry = json.loads(line_str)
+            except json.JSONDecodeError:
+                print(f"Corruption at line {line_number}: Invalid JSON.")
+                corrupted = True
+                break
+
+            recorded_prev = entry.get("prev_hash")
+            recorded_hash = entry.get("entry_hash")
+
+            # Backward compatibility for unhashed legacy entries
+            if recorded_prev is None or recorded_hash is None:
+                continue
+
+            if recorded_prev != expected_prev:
+                print(f"Chain broken at line {line_number}!")
+                print(f"  Expected prev_hash: {expected_prev}")
+                print(f"  Recorded prev_hash: {recorded_prev}")
+                corrupted = True
+                break
+
+            payload = {k: v for k, v in entry.items() if k not in ("prev_hash", "entry_hash")}
+            recalculated = compute_entry_hash(payload, recorded_prev)
+            if recalculated != recorded_hash:
+                print(f"Tamper detected at line {line_number}!")
+                print(f"  Payload modified. Recalculated: {recalculated}, Recorded: {recorded_hash}")
+                corrupted = True
+                break
+
+            expected_prev = recorded_hash
+
+    if corrupted:
+        print("\nAudit Result: FAILED - Ledger chain is corrupted or tampered.")
+        sys.exit(1)
+    else:
+        print(f"Audit Result: PASSED - {line_number} entries verified. Cryptographic hash chain valid.")
+        sys.exit(0)
 
 
 def cmd_report(args: argparse.Namespace) -> None:
@@ -78,7 +177,6 @@ def cmd_report(args: argparse.Namespace) -> None:
         rung = e.get("rung", "unknown")
         rungs_count[rung] = rungs_count.get(rung, 0) + 1
 
-    # Output markdown report
     print("\n# Ultima-Graph Session Cost & Efficiency Ledger\n")
     print(f"- Total Tasks Executed: {total_tasks}")
     print(f"- Files Directly Read: {total_files_read}")
@@ -166,6 +264,7 @@ def main() -> None:
 
     subparsers.add_parser("report", help="Display audit summary report")
     subparsers.add_parser("reset", help="Clear ledger")
+    subparsers.add_parser("verify", help="Verify cryptographic hash chain integrity")
 
     args = parser.parse_args()
     if args.command == "record":
@@ -174,6 +273,8 @@ def main() -> None:
         cmd_report(args)
     elif args.command == "reset":
         cmd_reset(args)
+    elif args.command == "verify":
+        cmd_verify(args)
 
 
 if __name__ == "__main__":

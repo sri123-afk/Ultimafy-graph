@@ -54,3 +54,10 @@ tmp/
 *.swp
 *.swo
 *~
+
+# Release Archive Artifacts (built via scripts/package.sh and published to GitHub Releases)
+*.skill
+*.tar.gz
+*.zip
+dist/
+

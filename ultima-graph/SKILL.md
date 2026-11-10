@@ -81,6 +81,9 @@ For complete falsification rules and filled templates, load [logic-protocol.md](
    * `AMBIGUOUS`: Dynamic reflection, unverified callbacks, or name collision. Never use as the sole basis for an architectural recommendation; flag under "Needs Human Review".
 3. **Hub-Hop Guard:** When finding paths between symbols, cap unnamed intermediate bridge hops at a maximum of 1 to prevent wandering through utility logging hubs.
 4. **Falsification Step:** For any non-trivial architectural conclusion, state one concrete observation that would disprove it.
+5. **Deterministic Ground Truth Gate:** String matches cannot hallucinate. Validate citations using `scripts/verify_citations.py`. Fail closed: if a cited file, line range, or snippet fails against disk, reject the answer.
+6. **Autonomy Tiers:** T0 (Read-only: auto-ship if citations pass), T1 (Reversible branch edit: auto-accept if tests green), T2 (Irreversible/shared: mandatory human sign-off).
+7. **Escalation Triggers:** Automatically stop and escalate to human if evidence is `AMBIGUOUS`, blast radius > 10, a god node is touched, or dual-path tools diverge.
 
 ---
 

@@ -113,4 +113,69 @@ When recommending an architectural change or refactor, document the decision usi
 * **Chosen Approach:** [Selected Option]
 * **Rationale:** [Evidence from graph: caller count, blast radius, test coverage]
 * **Reversal Cost:** [Low / Moderate / High - what is required to undo this if wrong?]
+
+---
+
+## 8. Autonomy Tiers by Risk
+
+To prevent infinite validator chains while ensuring complete safety, calibrate agent autonomy into three strict tiers:
+
+| Tier | Scope | Verification Requirement | Human Sign-Off |
+|---|---|---|---|
+| **Tier 0 (T0)** | Read-only answers, navigation, code explanations, audit reports | Auto-ship **only if** `verify_citations.py` passes 100% on disk. | Not needed for read-only or reversible queries. |
+| **Tier 1 (T1)** | Reversible code edits on an isolated git branch | Auto-accept **only if** build, type-check, and affected tests are green. | Not needed during development; automatic rollback on test failure. |
+| **Tier 2 (T2)** | Irreversible or shared actions (main branch merge, deployment, schema migration, file deletion, secrets) | Written policy compliance check + tamper-evident ledger entry. | **Mandatory human approval** required before execution. |
+
+---
+
+## 9. Deterministic Ground Truth Verification (`scripts/verify_citations.py`)
+
+A string match cannot hallucinate. The chain of validation terminates at **deterministic ground truth**, not another LLM:
+* Does the cited symbol exist in the source index?
+* Does the quoted snippet verbatim appear at that exact `file:line` on disk?
+* Does the code compile, type-check, and pass affected tests?
+* Does an independent script reproduce the calculation?
+
+### Verification Command
+Before delivering any technical response with citations or snippets, pass the citations through the deterministic verifier:
+```bash
+python3 scripts/verify_citations.py --input-file response.md
+```
+Or pass citation JSON via stdin:
+```bash
+echo '[{"file": "src/auth.ts", "lines": [12, 18], "snippet": "function verifyToken"}]' | python3 scripts/verify_citations.py
+```
+
+**Fail-Closed Rule:** If any single citation fails (missing file, shifted line range, or snippet mismatch), the entire answer is rejected and regenerated. Never output an unverified claim.
+
+---
+
+## 10. Automatic Escalation Triggers
+
+The agent must immediately halt autonomous execution, fail closed, and escalate to a human operator when ANY of these conditions occur:
+1. **Ambiguity Gate:** The primary evidence relies strictly on `AMBIGUOUS` confidence tags (e.g. unverified dynamic callbacks or reflection).
+2. **Blast Radius Threshold:** The affected caller tree exceeds **10 direct/indirect consumers** or spans across network/language boundaries.
+3. **God Node Contamination:** Proposed modification touches an architectural hub or god node with in-degree > 25.
+4. **Test Gap:** The affected symbols have 0% automated test coverage in the existing test suite.
+5. **Validator Divergence:** Two independent extraction tools disagree on call flow or symbol presence.
+
+---
+
+## 11. Dual-Path Redundancy for High-Stakes Claims
+
+For critical architectural claims or refactoring proposals:
+1. Run the **Indexed Path:** Query AST index or knowledge graph (`tactical_explore` / `query_graph`).
+2. Run the **Independent Fallback Path:** Run plain lexical search (`rg -w` or `grep -n`).
+3. **Agreement Check:** Both paths must agree on file locations and callers. If the index surfaces a route that `rg` misses (or vice-versa), treat as `AMBIGUOUS`, report the divergence, and escalate to the human.
+
+---
+
+## 12. Canary Checks & Validator Integrity Measurement
+
+To answer "who validates the validators", maintain a synthetic canary suite that measures validator error rates against planted ground truth:
+```bash
+python3 scripts/verify_citations.py --canary
+```
+* **Planted Ground Truth:** The canary executes known-valid citations alongside deliberately planted errors (nonexistent files, out-of-bounds line numbers, hallucinated snippets).
+* **Integrity Metric:** The verifier must maintain a **0.0% false-acceptance rate**. If any planted invalid citation passes, autonomy switches off immediately.
 ```
