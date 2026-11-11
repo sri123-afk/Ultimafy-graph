@@ -1,18 +1,18 @@
-# Ultima-Graph
+# Ultimafy-Graph
 
 **Cost-Optimised, Evidence-First Codebase and Knowledge-Graph Intelligence Protocol**
 
-Ultima-Graph is an open-source agent skill and operational protocol for AI coding agents (Claude Code, Google Antigravity, Cursor, OpenCode, Codex). It fuses deterministic AST code indexing with multimodal topological network analysis and an executive business translation layer.
+Ultimafy-Graph is an open-source agent skill and operational protocol for AI coding agents (Claude Code, Google Antigravity, Cursor, OpenCode, Codex). It fuses deterministic AST code indexing with multimodal topological network analysis and an executive business translation layer.
 
-> **Architecture Note:** Ultima-Graph is an **instruction and governance protocol layer**. The indexing engines, [CodeGraph](https://github.com/colbymchenry/codegraph) (tactical: symbols, callers, impact, affected tests) and [Graphify](https://github.com/Graphify-Labs/graphify) (strategic: communities, god nodes, code↔docs graph), are optional external tools. When installed, Ultima-Graph routes questions to them. When absent, it runs in **Degraded Mode** with targeted search discipline.
+> **Architecture Note:** Ultimafy-Graph is an **instruction and governance protocol layer**. The indexing engines, [CodeGraph](https://github.com/colbymchenry/codegraph) (tactical: symbols, callers, impact, affected tests) and [Graphify](https://github.com/Graphify-Labs/graphify) (strategic: communities, god nodes, code↔docs graph), are optional external tools. When installed, Ultimafy-Graph routes questions to them. When absent, it runs in **Degraded Mode** with targeted search discipline.
 
 ---
 
-## Why Ultima-Graph?
+## Why Ultimafy-Graph?
 
 Unguided coding agents spend much of their token budget and latency on iterative `grep`/`glob`/`read` loops, sometimes cite line numbers that don't exist, and describe structural debt in jargon that stakeholders can't evaluate.
 
-Ultima-Graph solves this with four core pillars:
+Ultimafy-Graph solves this with four core pillars:
 
 1. **Token Thrift (The Cost Ladder):** Cheapest sufficient evidence first: context → CodeGraph → Graphify → targeted reads → incremental refresh → (gated) LLM extraction. Optional hash-chained cost ledger for benchmarking.
 2. **Deterministic Ground Truth:** Validation ends at disk, not at another LLM. `scripts/verify_citations.py` checks that cited files exist inside the repo, ranges are in bounds, and symbols/snippets appear there. Negative claims ("unused") need two independent witnesses.
@@ -23,7 +23,7 @@ Ultima-Graph solves this with four core pillars:
 
 ## What to expect (and how to measure it)
 
-Ultima-Graph is a protocol, so its savings come from the engines it routes to and from the discipline it enforces (no re-reads, range reads, batched queries, no indexing tiny repos).
+Ultimafy-Graph is a protocol, so its savings come from the engines it routes to and from the discipline it enforces (no re-reads, range reads, batched queries, no indexing tiny repos).
 
 | Lever | Effect |
 |---|---|
@@ -54,39 +54,39 @@ The agent **asks before editing** (it never refuses to analyze) when a change to
 ```bash
 # Global installation (recommended)
 mkdir -p ~/.claude/skills
-curl -fsSL https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/ultima-graph.tar.gz | tar -xz -C ~/.claude/skills/
+curl -fsSL https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/ultimafy-graph.tar.gz | tar -xz -C ~/.claude/skills/
 
 # Or per-project installation
 mkdir -p .claude/skills
-curl -fsSL https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/ultima-graph.tar.gz | tar -xz -C .claude/skills/
+curl -fsSL https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/ultimafy-graph.tar.gz | tar -xz -C .claude/skills/
 ```
 
 ### For Google Antigravity
 ```bash
 # Global installation
 mkdir -p ~/.gemini/antigravity/skills
-curl -fsSL https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/ultima-graph.tar.gz | tar -xz -C ~/.gemini/antigravity/skills/
+curl -fsSL https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/ultimafy-graph.tar.gz | tar -xz -C ~/.gemini/antigravity/skills/
 
 # Or per-project installation
 mkdir -p .agents/skills
-curl -fsSL https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/ultima-graph.tar.gz | tar -xz -C .agents/skills/
+curl -fsSL https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/ultimafy-graph.tar.gz | tar -xz -C .agents/skills/
 ```
 
 ### For OpenCode
 ```bash
 mkdir -p ~/.opencode/skills
-curl -fsSL https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/ultima-graph.tar.gz | tar -xz -C ~/.opencode/skills/
+curl -fsSL https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/ultimafy-graph.tar.gz | tar -xz -C ~/.opencode/skills/
 ```
 
 ### For Cursor
-Add a reference to the skill in your project's `.cursor/rules/ultima-graph.mdc` or `.cursorrules`:
+Add a reference to the skill in your project's `.cursor/rules/ultimafy-graph.mdc` or `.cursorrules`:
 ```markdown
-Always follow the Ultima-Graph protocol located at .agents/skills/ultima-graph/SKILL.md
+Always follow the Ultimafy-Graph protocol located at .agents/skills/ultimafy-graph/SKILL.md
 for code exploration, blast radius analysis, and citation verification.
 ```
 
 ### For Codex & Universal Agent CLIs
-Include the skill directory under `.agents/skills/ultima-graph` and reference `ultima-graph/SKILL.md` in your repository's root `AGENTS.md`.
+Include the skill directory under `.agents/skills/ultimafy-graph` and reference `ultimafy-graph/SKILL.md` in your repository's root `AGENTS.md`.
 
 ---
 
@@ -96,20 +96,20 @@ To download and verify the release archive before extracting:
 
 ```bash
 mkdir -p .agents/skills
-curl -fsSL -o /tmp/ultima-graph.tar.gz https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/ultima-graph.tar.gz
+curl -fsSL -o /tmp/ultimafy-graph.tar.gz https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/ultimafy-graph.tar.gz
 
 # Optional: verify SHA-256 checksum
 curl -fsSL https://github.com/sri123-afk/Ultimafy-graph/releases/download/v1.0/checksums.sha256 | shasum -a 256 --check --ignore-missing
 
-tar -xzf /tmp/ultima-graph.tar.gz -C .agents/skills/
-rm /tmp/ultima-graph.tar.gz
+tar -xzf /tmp/ultimafy-graph.tar.gz -C .agents/skills/
+rm /tmp/ultimafy-graph.tar.gz
 ```
 
 ---
 
 ## Degraded Mode (Standalone / Zero-Dependency Mode)
 
-When neither engine is installed, Ultima-Graph runs in **Degraded Mode**: precise `rg -w` searches, range reads around hits (whole files only when small), lexical evidence tagged `INFERRED`, and one-line install guidance:
+When neither engine is installed, Ultimafy-Graph runs in **Degraded Mode**: precise `rg -w` searches, range reads around hits (whole files only when small), lexical evidence tagged `INFERRED`, and one-line install guidance:
 
 ```bash
 npm i -g @colbymchenry/codegraph && codegraph install -y -t auto   # CodeGraph + MCP wiring
@@ -122,7 +122,7 @@ bash scripts/update.sh --init                                      # build both 
 ## Directory Structure
 
 ```
-ultima-graph/
+ultimafy-graph/
 ├── SKILL.md                               # Master protocol and progressive disclosure router (<500 lines)
 ├── README.md                              # Public documentation and setup guide
 ├── LICENSE                                # MIT License
@@ -140,7 +140,7 @@ ultima-graph/
 │   ├── tool-detection-and-fallbacks.md    # Engine setup, MCP configs, and graceful degradation
 │   └── evals.md                           # Verification prompts, pass criteria, and test runs
 ├── scripts/
-│   ├── update.sh                          # "ultima-graph update": refresh stale indexes, no LLM tokens
+│   ├── update.sh                          # "ultimafy-graph update": refresh stale indexes, no LLM tokens
 │   ├── detect_tools.sh                    # Engine, version, freshness & feature detector (JSON)
 │   ├── cost_ledger.py                     # Session cost, token, and hash-chained ledger (Python stdlib)
 │   ├── verify_citations.py                # Deterministic ground-truth citation verifier (Python stdlib)
@@ -192,7 +192,7 @@ bash scripts/package.sh
 
 ## Attribution and Upstream References
 
-Ultima-Graph is inspired by and references foundational architectures from:
+Ultimafy-Graph is inspired by and references foundational architectures from:
 
 * **CodeGraph** by Colby McHenry ([github.com/colbymchenry/codegraph](https://github.com/colbymchenry/codegraph)): Deterministic AST code intelligence, Tree-sitter kernel, SQLite WAL/FTS5 indexing, identifier sub-tokenization, and transitive test mapping.
 * **Graphify** by Safi Shamsi / Graphify Labs ([github.com/Graphify-Labs/graphify](https://github.com/Graphify-Labs/graphify)): Multimodal knowledge graph construction, Leiden community clustering, god-node centrality detection, cohesion scoring, and GraphRAG topological queries.

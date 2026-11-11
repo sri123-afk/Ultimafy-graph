@@ -1,11 +1,11 @@
 ---
-name: ultima-graph
+name: ultimafy-graph
 description: Cost-optimised, evidence-first codebase intelligence that orchestrates CodeGraph (deterministic AST index - symbols, callers, impact, affected tests) and Graphify (knowledge graph over code + docs/PDFs/media - communities, god nodes, cross-domain links), with a business translation layer. Use whenever the user wants to understand, navigate, trace, debug, refactor, audit, onboard onto, implement a feature in, or estimate changes to a codebase or mixed code+docs corpus; asks about call paths, blast radius, impact, dead code, god nodes, hotspots, architecture, tech debt, dependency upgrades, affected tests, PR risk, docs-vs-code drift, or "where is X handled"; wants fewer tokens/tool calls when exploring a repo; or needs technical findings turned into business terms (risk, effort ranges, timeline, client or exec summaries). Trigger even if the user never mentions graphs or indexing.
 ---
 
-# Ultima-Graph Protocol
+# Ultimafy-Graph Protocol
 
-Ultima-Graph is a **protocol layer**, not an indexer. It routes each question to the cheapest trustworthy evidence source, keeps claims grounded in real `file:line` coordinates, and translates findings for non-engineers.
+Ultimafy-Graph is a **protocol layer**, not an indexer. It routes each question to the cheapest trustworthy evidence source, keeps claims grounded in real `file:line` coordinates, and translates findings for non-engineers.
 
 | Engine | Real tool | State on disk | Best at |
 |---|---|---|---|
@@ -132,7 +132,7 @@ Say it once ("No code index available; using targeted search."), offer the one-l
 
 ## 9. Commands & Workflows
 
-**Helper commands:** `scripts/update.sh` (ultima-graph update: `--check`, `--init`, `--force`, `--only codegraph|graphify`) · `scripts/detect_tools.sh` · `scripts/preflight_estimate.py` · `scripts/verify_citations.py` · `scripts/cost_ledger.py`
+**Helper commands:** `scripts/update.sh` (ultimafy-graph update: `--check`, `--init`, `--force`, `--only codegraph|graphify`) · `scripts/detect_tools.sh` · `scripts/preflight_estimate.py` · `scripts/verify_citations.py` · `scripts/cost_ledger.py`
 
 Step-by-step procedures in [workflows.md](references/workflows.md):
 

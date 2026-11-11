@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-verify_citations.py - Deterministic ground-truth citation verifier for ultima-graph.
+verify_citations.py - Deterministic ground-truth citation verifier for ultimafy-graph.
 
 Checks that cited files exist INSIDE the repo, line ranges are in bounds, and
 quoted snippets / symbols actually appear in the cited range. No LLM involved.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# package.sh - Build distribution bundles for ultima-graph. Works from any cwd.
-# Output: <repo>/dist/ultima-graph.{tar.gz,zip,skill} + checksums.sha256
+# package.sh - Build distribution bundles for ultimafy-graph. Works from any cwd.
+# Output: <repo>/dist/ultimafy-graph.{tar.gz,zip,skill} + checksums.sha256
 set -euo pipefail
 
 SKILL_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

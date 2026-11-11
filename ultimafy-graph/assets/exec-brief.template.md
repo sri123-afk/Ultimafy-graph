@@ -2,7 +2,7 @@
 
 **Date:** [YYYY-MM-DD]  
 **Audience:** Executive Leadership / VP of Engineering / CTO  
-**Prepared by:** [Name / team] (with ultima-graph analysis)  
+**Prepared by:** [Name / team] (with ultimafy-graph analysis)  
 **Scope:** [Target Repository / Microservice / Module]  
 
 ---

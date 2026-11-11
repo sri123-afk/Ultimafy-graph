@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# update.sh - "ultima-graph update": one command to bring BOTH engines up to date.
+# update.sh - "ultimafy-graph update": one command to bring BOTH engines up to date.
 #
 #   bash scripts/update.sh [path] [--check] [--init] [--force] [--only codegraph|graphify] [--verbose]
 #

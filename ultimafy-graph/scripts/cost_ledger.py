@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-cost_ledger.py - Session Cost and Evidence Ledger for ultima-graph.
+cost_ledger.py - Session Cost and Evidence Ledger for ultimafy-graph.
 Standard library only. Tracks task costs, rung escalations, files read vs avoided,
 and token metrics. Uses SHA-256 hash chaining to detect edits, deletions and
 unhashed appends (not proof against an attacker who rewrites the whole file). Writes to .ultima/ledger.jsonl.
@@ -185,7 +185,7 @@ def cmd_report(args: argparse.Namespace) -> None:
         rung = e.get("rung", "unknown")
         rungs_count[rung] = rungs_count.get(rung, 0) + 1
 
-    print("\n# Ultima-Graph Session Cost & Efficiency Ledger\n")
+    print("\n# Ultimafy-Graph Session Cost & Efficiency Ledger\n")
     if skipped:
         print(f"- WARNING: {skipped} malformed/unhashed line(s) excluded. Run `verify`.")
     print(f"- Total Tasks Executed: {total_tasks}")
@@ -245,7 +245,7 @@ def cmd_reset(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Ultima-Graph Cost and Efficiency Ledger")
+    parser = argparse.ArgumentParser(description="Ultimafy-Graph Cost and Efficiency Ledger")
     parser.add_argument(
         "--ledger-path",
         default=str(DEFAULT_LEDGER_FILE),

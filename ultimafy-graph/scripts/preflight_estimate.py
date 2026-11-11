@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-preflight_estimate.py - Sizing, cost and safety preflight for ultima-graph.
+preflight_estimate.py - Sizing, cost and safety preflight for ultimafy-graph.
 
 Separates CODE (AST-indexed locally, no LLM tokens) from LLM-BOUND files
 (docs, papers, images, media - these cost tokens under L5 semantic extraction),

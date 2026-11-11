@@ -1,6 +1,6 @@
 # Attribution and Upstream References
 
-Ultima-Graph synthesizes and builds upon the foundational research, algorithms, and architectures established by two open-source software intelligence projects:
+Ultimafy-Graph synthesizes and builds upon the foundational research, algorithms, and architectures established by two open-source software intelligence projects:
 
 ---
 
@@ -34,6 +34,6 @@ Ultima-Graph synthesizes and builds upon the foundational research, algorithms, 
 
 ## License Notices
 
-Both upstream projects are distributed under permissive open-source licenses (MIT and Apache 2.0). Ultima-Graph incorporates the operational workflows, schemas, prompt protocols, and tool routing patterns inspired by these systems while providing an integrated, cost-governed execution environment for AI agents.
+Both upstream projects are distributed under permissive open-source licenses (MIT and Apache 2.0). Ultimafy-Graph incorporates the operational workflows, schemas, prompt protocols, and tool routing patterns inspired by these systems while providing an integrated, cost-governed execution environment for AI agents.
 
 Copies of the original licenses are maintained in their respective source repositories linked above.

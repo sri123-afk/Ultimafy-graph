@@ -4,7 +4,7 @@ Load when executing a multi-step task. `T#` = template in [output-templates.md](
 
 ---
 
-## WF0 Update indexes ("ultima-graph update")
+## WF0 Update indexes ("ultimafy-graph update")
 **Cues:** "update the graph", "refresh index", "I pulled", "switched branch", detect `fresh:false`.
 1. `bash scripts/update.sh --check` (dry run). Exit 0 → nothing to do; stop.
 2. `bash scripts/update.sh` → refreshes only stale engines. Report the one-line JSON result.
