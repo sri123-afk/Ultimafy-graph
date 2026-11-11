@@ -1,97 +1,98 @@
-# Cost Governor: The Ultima-Graph Economic Protocol
+# Cost Governor
 
-This reference defines the economic discipline, cost ladder, budgeting rules, and ledger tracking for ultima-graph. Load this file whenever escalating between execution rungs, evaluating token or compute budgets, or compiling session cost reports.
-
----
-
-## 1. The Cost Ladder (Rungs L0 through L6)
-
-The agent must climb the cost ladder only when a lower rung lacks the necessary information to provide a verified answer. The agent must state the rung it is on and justify why it escalated.
-
-| Rung | Tier Name | Entry Condition | Typical Artifacts & Methods | Cost Class | Exit Criteria |
-|---|---|---|---|---|---|
-| **L0** | In-Context / Cached | Query can be answered by active conversation memory or existing report files. | `GRAPH_REPORT.md`, conversation history, prior tool outputs. | Zero | Evidence already exists in context; no tool calls required. |
-| **L1** | Deterministic Index | Query targets source code symbols, call flows, or blast radius; index exists. | `tactical_explore`, `tactical impact`, `tactical affected`. | Near-Zero (<0.01 USD / ~500 tokens) | Complete source snippet, call path, and blast radius retrieved in 1-2 calls. |
-| **L2** | Cached Topology | Query asks about architecture, communities, god nodes, or global cohesion. | `topology-out/graph.json`, `.topology_analysis.json`, `query_graph`. | Minimal (~1k-2k tokens) | Cluster membership, hub centrality rankings, or shortest path identified. |
-| **L3** | Targeted Range Read | L1/L2 provided exact file and line coordinates, but surrounding implementation logic is required. | `Read` tool constrained strictly to line numbers (e.g., `L45-L90`). Never read full files. | Low (<1k tokens) | Implementation details or comments confirmed without reading extraneous file content. |
-| **L4** | Incremental Sync | Index is flagged stale (modified files detected by watcher or git commit mismatch). | `tactical sync`, `strategic update`. | Moderate (compute only) | SQLite index or JSON graph updated with only the modified file subset. |
-| **L5** | Multimodal LLM Extraction | User requests semantic analysis of unstructured media (Markdown docs, PDFs, images). | Parallel subagents or Gemini API over doc chunks. Preflight check mandatory. | Medium-High (token cost tracks corpus size) | Extracted semantic nodes and hyperedges persisted to disk cache. |
-| **L6** | Full Corpus Rebuild | Corrupted index, major schema migration, or explicit user `--force` command. | `tactical index --force`, `strategic rebuild`. | High (maximum compute / tokens) | Complete rebuild verified; justified only when L4 incremental sync fails. |
+Load when deciding whether to escalate, budgeting a large task, running preflight before L5/L6, or reporting session efficiency. Thresholds live in SKILL.md §5.
 
 ---
 
-## 2. Default Soft Budgets per Task Type
+## 1. Ladder rules
 
-The agent must not exceed these soft limits without explicit operational justification:
+| Rung | Enter when | Exit when |
+|---|---|---|
+| L0 Context | The answer is already in this conversation or a report you read | Always check first |
+| L1 CodeGraph | Code symbols, flows, callers, impact, tests | Verbatim source/caller list in hand |
+| L2 Graphify | Architecture, communities, hubs, code↔docs links | Report section / query result in hand |
+| L3 Targeted read | You need logic the index didn't return (a branch, config value, comment) | The specific lines are seen |
+| L4 Incremental | Index stale (detect `fresh:false`, pull, branch switch) | `bash scripts/update.sh` done, then retry the lower rung |
+| L5 LLM extraction | The question needs docs/PDFs/images/media semantics | Consent obtained if over the gate |
+| L6 Full rebuild | L4 failed or index corrupt | Never as a default |
 
-| Task Type | Maximum Allowed Rung | Max Direct File Reads | Max LLM Extraction Calls | Hard Stop Condition |
+**Escalation is justified only by a specific missing fact.** "To be thorough" is not a reason.
+
+---
+
+## 2. Soft budgets per task
+
+| Task | Typical rungs | Max range reads | LLM calls | Stop when |
 |---|---|---|---|---|
-| **Symbol / Code Lookup** | L1 (Escalate to L3 only if ambiguous) | 2 files (range-bound) | 0 | Symbol found and cited. |
-| **Call Flow Tracing** | L1 | 1 file (range-bound) | 0 | Call chain reaches terminal sink or database boundary. |
-| **Blast Radius / Impact** | L1 | 0 files | 0 | Caller tree compiled to specified depth (default 2-3). |
-| **Affected Test Selection** | L1 | 0 files | 0 | Test files mapped from git diff. |
-| **Dead Code Detection** | L1 (Escalate to L2 for doc check) | 0 files | 0 | Unreferenced symbol list compiled. |
-| **Architecture Audit** | L2 | 3 files (range-bound hotspots) | 0 | Top 5 god nodes and surprising connections ranked. |
-| **System Onboarding** | L2 (Escalate to L1 for drill-down) | 3 files | 0 | Module summaries and cluster map compiled. |
-| **Docs vs Code Drift** | L5 (Selective changed docs only) | 5 files | Bounded by preflight check | All documented endpoints cross-checked against code. |
+| Symbol lookup | L1 | 1 | 0 | Symbol found and cited |
+| Call-flow trace | L1 (+L3) | 2 | 0 | Path reaches sink or an external boundary |
+| Impact | L1 (+L2) | 0 | 0 | Callers to depth 2, communities counted |
+| Affected tests | L1 | 0–1 | 0 | Test list plus full-regression verdict |
+| Feature implementation | L1 → edit | 3 | 0 | Edit made, affected tests listed or run |
+| Bug root-cause | L3 → L1 | 4 | 0 | Faulty line identified and fix proposed |
+| Dead code | L1 + `rg` | 0 | 0 | Each candidate has two-witness evidence |
+| Architecture audit | L2 → L1 | 3 | 0 | Top 5 hotspots ranked with evidence |
+| Onboarding | L2 → L1 | 3 | 0 | Entry points, core models, externals mapped |
+| Docs drift | L3 on docs → L1 | 5 docs | 0 (L5 only for PDFs/media) | Each doc claim verified or flagged |
+
+Over budget? Present what you have with its gaps. Don't silently keep spending.
 
 ---
 
-## 3. The Cost Ledger Protocol (`scripts/cost_ledger.py`)
+## 3. Preflight (before L5/L6 only)
 
-Every substantive query must be logged to `.ultima/ledger.jsonl` using the deterministic ledger CLI.
-
-### Logging a Task Run
 ```bash
-python3 scripts/cost_ledger.py record \
-  --task "trace_checkout_flow" \
-  --rung "L1" \
-  --files-read 0 \
-  --files-avoided 14 \
-  --llm-calls 0 \
-  --input-tokens 480 \
-  --output-tokens 150 \
-  --notes "Retrieved via tactical explore in 1 round-trip"
+python3 scripts/preflight_estimate.py . [--json]
 ```
+It reports `llm_bound` (docs/papers/images/media, which cost tokens) separately from `code` (AST, free), plus `sensitive_files` and `skipped_large_files`. It uses `git ls-files` when available, so `.gitignore` is respected.
 
-### Compiling Session Cost Audit
-To display cumulative token usage, avoidance rates, and rung distribution:
-```bash
-python3 scripts/cost_ledger.py report
-```
+| Result | Action |
+|---|---|
+| `compact` | Skip indexing; direct `rg` + reads |
+| `normal` | Proceed with L1/L2. L5 is fine for named docs |
+| `large` (over the L5 gate) | State file/word counts and that tokens scale with them. Get explicit consent. Offer narrowing (top dirs, `--code-only`, local `--backend ollama`) |
+| `sensitive_files` non-empty | Add them to `.graphifyignore` before any L5 run |
 
-### Ledger Logging Rules
-1. **Never fabricate tokens:** If exact token counts from the MCP tool response are unavailable, calculate standard heuristic estimates (~4 characters per token) and pass `--estimate`.
-2. **Files Avoided Metric:** Calculate files avoided as the count of files referenced in the graph retrieval result that the agent would have had to open and read manually.
-3. **Session Reset:** Reset the ledger before starting a distinct, benchmarked evaluation (`python3 scripts/cost_ledger.py reset`).
+Files > 50 MB are skipped and listed; never silently included.
 
 ---
 
-## 4. Preflight Sizing & Threshold Enforcement
+## 4. Stop rules
 
-Before initiating any L5 multimodal extraction or L6 full rebuild, the agent must run:
-```bash
-python3 scripts/preflight_estimate.py [path]
-```
-
-### Threshold Action Rules
-* **Floor Check (< 50,000 estimated words):** Inform the user that the corpus is compact and can be navigated via in-context L0 reads or lightweight L1 queries without expensive graph generation.
-* **Ceiling Check (> 500,000 words OR > 500 files):**
-  * **Mandatory Warning:** Alert the user to projected token consumption and execution time.
-  * **Explicit Consent Gate:** The agent is forbidden from running L5 semantic extraction across the full corpus without explicit user approval.
-  * **Subdirectory Narrowing:** Offer to run extraction only on the top 3-5 subdirectories ranked by file volume.
-* **Safety Ceilings:** Automatically skip any file exceeding 50 MB raw on-disk size to protect against out-of-memory crashes.
+1. **Sufficiency:** stop once the answer is verified. AST-returned source doesn't need re-verifying with grep (negative claims excepted, Directive 4).
+2. **Marginal value:** if the next rung would roughly double cost for a minor confidence gain, stop and present the answer with its tag and gap.
+3. **No re-reads:** reuse ranges and symbols already in context.
+4. **Batch:** combine symbols into one `explore`, and combine independent shell checks into one command.
 
 ---
 
-## 5. Stop Rules and Caching Discipline
+## 5. `update.sh`: one-command refresh (L4)
 
-### Stop Rules (When to Terminate Exploration)
-1. **Sufficiency Rule:** Stop immediately once a direct, verified citation answering the user's question has been obtained. Do not make supplemental calls to verify facts already proven by AST.
-2. **Marginal Value Rule:** If escalating from L1 to L3 or L2 to L5 is projected to double session token consumption while improving answer confidence by less than 10%, terminate and present the current finding with an `INFERRED` tag.
-3. **Re-Read Ban:** Never read a file range or request a symbol that was already returned earlier in the same conversation. Re-use the existing in-context snippet.
+```bash
+bash scripts/update.sh --check     # free dry run: exit 0 fresh, 10 stale
+bash scripts/update.sh             # refresh ONLY stale engines (codegraph sync, graphify update .)
+bash scripts/update.sh --init      # build missing indexes (local, no LLM)
+bash scripts/update.sh --force     # full codegraph index + graphify update --force (after big refactors)
+bash scripts/update.sh --only codegraph
+```
+- Never spends LLM tokens. If Graphify reports pending **semantic** re-extraction (docs/PDFs changed), the JSON `hint` says so. That is L5: ask before running `/graphify --update`.
+- Tool output goes to `.ultima/update.log`. Stdout is one JSON line, so it barely costs context.
+- In MCP/daemon mode CodeGraph's watcher already syncs, so you rarely need it for CodeGraph. It matters for CLI-only use and for Graphify.
+- Automate: `graphify hook install` (post-commit) or a git `post-merge`/`post-checkout` hook calling `bash <skill>/scripts/update.sh -q` (add `>/dev/null`).
 
-### Caching Discipline
-1. Prefer incremental updates (`tactical sync` or `strategic update`) over full rebuilds.
-2. Never re-extract unchanged source files verified by `(size, mtime)` content hashes.
-3. Preserve all `.ultima/` and `topology-out/` cache artifacts across session turns.
+## 6. Ledger (opt-in)
+
+The ledger is for **benchmarking or when the user asks for cost tracking**. It is not a per-answer ritual: every call is itself a tool round-trip.
+
+```bash
+python3 scripts/cost_ledger.py record --task "trace_checkout" --rung L1 \
+  --files-read 1 --files-avoided 9 --llm-calls 0 --estimate --notes "1 explore + 1 range read"
+python3 scripts/cost_ledger.py report     # summary + rung distribution
+python3 scripts/cost_ledger.py verify     # hash-chain integrity
+python3 scripts/cost_ledger.py reset      # archives to ledger.<timestamp>.jsonl, never deletes
+```
+
+Rules:
+- Agents rarely see real token counts. Use `--estimate` (≈ chars/4) unless a tool returned exact numbers.
+- `files_avoided` = files the index result spanned that you didn't open. Count them, don't guess.
+- The hash chain detects accidental edits and casual tampering. It is **not** proof against someone who can rewrite the whole file. Don't oversell it.

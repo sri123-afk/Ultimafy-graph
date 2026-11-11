@@ -1,30 +1,31 @@
 #!/usr/bin/env bash
-# package.sh - Build distribution packages for ultima-graph
+# package.sh - Build distribution bundles for ultima-graph. Works from any cwd.
+# Output: <repo>/dist/ultima-graph.{tar.gz,zip,skill} + checksums.sha256
 set -euo pipefail
 
-SKILL_DIR="ultima-graph"
-OUTPUT_DIR="dist"
+SKILL_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SKILL_NAME="$(basename "$SKILL_PATH")"
+REPO_ROOT="$(dirname "$SKILL_PATH")"
+OUTPUT_DIR="$REPO_ROOT/dist"
+EXCLUDES=(--exclude='.DS_Store' --exclude='__pycache__' --exclude='*.pyc' \
+          --exclude='.ultima' --exclude='.codegraph' --exclude='graphify-out')
 
-echo "Building distribution packages for Ultima-Graph..."
+echo "Building ${SKILL_NAME} bundles from ${SKILL_PATH}..."
+mkdir -p "$OUTPUT_DIR"
+rm -f "$OUTPUT_DIR/${SKILL_NAME}".{tar.gz,zip,skill} "$OUTPUT_DIR/checksums.sha256"
 
-# Clean temporary files
-find "${SKILL_DIR}" -name ".DS_Store" -delete 2>/dev/null || true
-find "${SKILL_DIR}" -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+# Quick self-test before shipping
+python3 "$SKILL_PATH/scripts/verify_citations.py" --canary >/dev/null
+bash -n "$SKILL_PATH/scripts/detect_tools.sh" "$SKILL_PATH/scripts/update.sh"
 
-mkdir -p "${OUTPUT_DIR}"
+# tarball contains the top-level <skill>/ folder (extract into a skills dir)
+tar -czf "$OUTPUT_DIR/${SKILL_NAME}.tar.gz" "${EXCLUDES[@]}" -C "$REPO_ROOT" "$SKILL_NAME"
 
-# Build tarball
-tar -czf "${OUTPUT_DIR}/ultima-graph.tar.gz" "${SKILL_DIR}"
+# zip / .skill also contain the top-level folder, matching the tarball layout
+(cd "$REPO_ROOT" && zip -r -q "$OUTPUT_DIR/${SKILL_NAME}.zip" "$SKILL_NAME" \
+    -x '*.DS_Store' '*__pycache__*' '*.pyc' '*/.ultima/*' '*/.codegraph/*' '*/graphify-out/*')
+cp "$OUTPUT_DIR/${SKILL_NAME}.zip" "$OUTPUT_DIR/${SKILL_NAME}.skill"
 
-# Build zip archive
-(cd "${SKILL_DIR}" && zip -r -q "../${OUTPUT_DIR}/ultima-graph.zip" .)
-
-# Build .skill bundle (zip copy)
-cp "${OUTPUT_DIR}/ultima-graph.zip" "${OUTPUT_DIR}/ultima-graph.skill"
-
-# Calculate SHA-256 checksums
-(cd "${OUTPUT_DIR}" && shasum -a 256 ultima-graph.* > checksums.sha256)
-
-echo "Packages generated in ${OUTPUT_DIR}/:"
-ls -lh "${OUTPUT_DIR}"
-cat "${OUTPUT_DIR}/checksums.sha256"
+(cd "$OUTPUT_DIR" && shasum -a 256 "${SKILL_NAME}".tar.gz "${SKILL_NAME}".zip "${SKILL_NAME}".skill > checksums.sha256)
+ls -lh "$OUTPUT_DIR"
+cat "$OUTPUT_DIR/checksums.sha256"

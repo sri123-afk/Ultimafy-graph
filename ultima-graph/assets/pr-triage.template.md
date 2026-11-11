@@ -36,6 +36,9 @@
 
 ---
 
+## 3b. Non-AST Signals
+* Schema/migration: `[YES/NO]` · Public API/signature change: `[YES/NO]` · Auth/payment/PII path: `[YES/NO]` · Tests deleted/skipped: `[YES/NO]`
+
 ## 4. Reviewer High-Salience Focus List
 Focus code review strictly on these high-risk hunks:
 1. `[path/to/file:L45-L80]` - Dynamic dispatch parameter change affecting `[DependentClass]`.

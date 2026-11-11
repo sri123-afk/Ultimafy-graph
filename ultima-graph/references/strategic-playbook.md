@@ -1,105 +1,98 @@
-# Strategic Engine Playbook: Topological Knowledge Intelligence
+# Strategic Engine Playbook: Graphify
 
-This playbook defines operational procedures for the multimodal knowledge-graph engine (CLI: `strategic`, MCP server: `strategic-mcp` / `strategic.serve`). Load this playbook whenever performing repository-wide architectural onboarding, identifying monolithic "god nodes", auditing technical debt, evaluating cross-community coupling, analyzing documentation drift, or triaging pull request risk.
+Load for architecture onboarding, god nodes, communities, surprising connections, code↔docs links, PR graph risk, or exports.
 
----
-
-## 1. Engine Core & Architectural Role
-
-The strategic engine constructs a multimodal knowledge graph unifying structured source code with unstructured artifacts (Markdown documentation, PDF research papers/RFCs, architecture diagrams, and Whisper-transcribed audio/video). It applies network science algorithms—specifically Leiden and Louvain community detection via `graspologic-native` and NetworkX—to surface high-level architectural topology.
-
-### Primary Objectives
-1. **Bridge Code and Human Context:** Link source code functions to user stories, API documentation, design specifications, and pull requests.
-2. **Surface Architectural Hotspots:** Quantify component centrality to identify single points of failure ("god nodes") and unexpected couplings ("surprising connections").
-3. **GraphRAG Navigation:** Support intent-driven graph exploration with vocabulary-expansion matching, BFS/DFS traversal, and human-readable audit reports.
+Upstream: [github.com/Graphify-Labs/graphify](https://github.com/Graphify-Labs/graphify) · PyPI `graphifyy` (note the double "y") · CLI `graphify`, MCP `graphify-mcp`. Verified against 0.8–0.9; run `graphify --help` if a flag errors.
 
 ---
 
-## 2. Real Tool Names, MCP Interface & Server Operation
+## 1. What it is
 
-### Starting the MCP Server
-```bash
-# Stdio transport (default for AI agent integration)
-strategic-mcp
-# or via module entrypoint
-python3 -m strategic.serve
+Builds `graphify-out/graph.json` from code (local AST, no LLM) and optionally from docs/PDFs/images/transcribed media (LLM semantic extraction). It clusters the graph with Leiden, ranks hubs ("god nodes"), flags cross-community "surprising connections", and writes `GRAPH_REPORT.md`. Every edge carries `relation` and `confidence` (`EXTRACTED` / `INFERRED` / `AMBIGUOUS`).
 
-# HTTP transport for team dashboards
-python3 -m strategic.serve --http --host 127.0.0.1 --port 8080
-```
+### Cost split (critical)
 
-### Verified MCP Tools
-* `query_graph`: Natural language GraphRAG traversal across nodes and edges (`query`, `mode: "bfs"|"dfs"`, `budget: int`).
-* `get_node`: Inspect attributes, label, file location, and connections of a single node (`label` or `node_id`).
-* `get_neighbors`: Fetch inbound and outbound edge connections for an entity (`node_id`).
-* `get_community`: List all nodes belonging to a specific topological cluster (`community_id: int`).
-* `god_nodes`: Retrieve top high-centrality hub nodes sorted by degree centrality (`top_n: int`).
-* `graph_stats`: Return global metrics (node count, edge count, density, community count).
-* `shortest_path`: Compute the shortest relationship chain between two concepts (`source`, `target`).
-* `list_prs`: Enumerate tracked pull requests.
-* `get_pr_impact`: Analyze graph components and communities affected by a pull request (`pr_number`).
-* `triage_prs`: Prioritize open PRs by architectural risk score (`top_n`).
+| Operation | LLM tokens? | Rung |
+|---|---|---|
+| `graphify update .` (re-extract code, re-cluster) | **No** | L4 |
+| `graphify extract . --code-only` | **No** | L4/L6 |
+| `graphify cluster-only . --no-label` | No | L4 |
+| `graphify query/path/explain/affected/god-nodes` | No | L2 |
+| `graphify extract .` with docs/PDFs/images, `--mode deep` | **Yes**, scales with LLM-bound corpus | L5 |
+| `graphify label .`, `cluster-only` with labeling | **Yes** (small) | L5 |
+| Audio/video transcription | Local Whisper compute + then L5 | L5 |
+
+Default to the code-only path unless the user's question needs docs/media.
 
 ---
 
-## 3. Real CLI Commands & Verified Flags
+## 2. CLI reference (verified)
 
 ```bash
-# 1. Full Pipeline Execution
-strategic                                    # Full build on current directory (generates HTML + JSON + report)
-strategic <path>                             # Run full pipeline on target directory
-strategic <path> --mode deep                 # In-depth extraction with enriched INFERRED relationships
-strategic <path> --update                    # Incremental update: extracts only modified or new files
-strategic <path> --directed                  # Build DiGraph preserving edge direction (source -> target)
-strategic <path> --cluster-only              # Re-run Leiden clustering on existing graph without re-extracting
-strategic <path> --no-viz                    # Headless mode: emits JSON and GRAPH_REPORT.md only
+# Build / refresh
+graphify update .                         # code-only re-extract + recluster (no LLM). --force if nodes shrank after a refactor
+graphify extract . --code-only            # headless build, code only, no API key
+graphify extract . [--backend claude|gemini|openai|ollama|...] [--mode deep] [--token-budget N]
+graphify cluster-only . [--no-viz] [--no-label]
+graphify label . [--missing-only]         # (re)name communities via LLM
+graphify check-update .                   # is semantic re-extraction pending?
+graphify watch .                          # rebuild on code changes
+graphify hook install                     # post-commit/checkout auto-update
 
-# 2. Ecosystem Exports
-strategic <path> --obsidian                  # Export graph as Obsidian vault (default: topology-out/obsidian)
-strategic <path> --obsidian --obsidian-dir ~/vaults/project # Export to custom Obsidian path
-strategic <path> --wiki                      # Generate crawlable Markdown wiki (index.md + community pages)
-strategic <path> --neo4j                     # Generate Cypher statements (topology-out/cypher.txt)
-strategic <path> --neo4j-push bolt://localhost:7687  # Directly ingest into Neo4j instance
-strategic <path> --falkordb-push falkordb://localhost:6379 # Ingest into FalkorDB
-strategic <path> --svg                       # Export high-resolution SVG diagram
-strategic <path> --graphml                   # Export GraphML for Gephi or yEd
+# Query (L2) - all default to graphify-out/graph.json, override with --graph
+graphify query "<question>" [--dfs] [--budget 2000] [--context C]
+graphify path "A" "B"                     # shortest path between concepts
+graphify explain "X"                      # node + neighbors in plain language
+graphify affected "X" [--depth 2] [--relation R]   # reverse traversal: what depends on X (incl. docs)
+graphify god-nodes [--top 10] [--json]
 
-# 3. Targeted Query & Inspection
-strategic query "<question>"                 # Breadth-First Search (BFS) for broad context
-strategic query "<question>" --dfs           # Depth-First Search (DFS) to trace specific call paths
-strategic query "<question>" --budget 2000   # Cap retrieval context at N tokens
-strategic path "<SymbolA>" "<SymbolB>"       # Shortest path between two entities
-strategic explain "<Symbol>"                 # Plain-language explanation of an entity and its cluster
-strategic add <url> --author "Name"          # Ingest URL into corpus and incrementally re-index
+# Feedback loop (improves later queries)
+graphify save-result --question Q --answer A --nodes N1 N2 --outcome useful|dead_end|corrected
+graphify reflect                          # aggregate memory → graphify-out/reflections/LESSONS.md
+
+# Multi-repo / exports
+graphify merge-graphs g1.json g2.json --out merged.json
+graphify global add graphify-out/graph.json --as <tag>
+graphify export html|wiki|obsidian|svg|graphml|callflow-html
+graphify export neo4j [--push bolt://...]   # set NEO4J_PASSWORD env, not --password
+graphify extract . --postgres "<DSN>"       # add live DB schema (tables, FKs) to the graph
+graphify prs                                # PR dashboard
+graphify benchmark                          # token reduction vs naive full-corpus read
 ```
 
----
-
-## 4. Output Artifacts in `topology-out/`
-
-All generated state lives under `topology-out/`:
-* `graph.json`: The complete node-link JSON graph. Every link stores `source`, `target`, `relation`, and `confidence`.
-* `GRAPH_REPORT.md`: Executive audit report containing God Nodes, Surprising Connections, Community Cohesion, and Suggested Questions.
-* `.topology_analysis.json`: Serialized community memberships, cohesion scores, and hub rankings.
-* `.topology_labels.json`: Curated human-readable community names (e.g., `0: "Payment Gateway", 1: "User Auth"`).
-* `cost.json`: Cumulative token tracking across runs (`total_input_tokens`, `total_output_tokens`).
-* `.vocab.txt`: Lexical vocabulary tokens extracted from node labels for IDF-safe query expansion.
+In Claude Code the `/graphify` skill drives full multimodal builds with subagents. Prefer it for L5 builds there.
 
 ---
 
-## 5. Confidence Rubric on Relationships
+## 3. MCP tools (`graphify-mcp`, stdio)
 
-Every edge emitted into the graph carries an explicit confidence level:
-1. **`EXTRACTED`**: Direct syntactic statement in source code (e.g., explicit import, direct function call, class inheritance).
-2. **`INFERRED`**: Deduced via second-pass resolution (e.g., Go receiver type binding, Ruby constant paths, co-occurrence in documentation, cross-tier HTTP paths).
-3. **`AMBIGUOUS`**: Probabilistic or uncertain deduction (e.g., matching common method name across multiple unrelated interfaces). Flagged for human review.
+`query_graph` · `get_node` · `get_neighbors` · `get_community` · `god_nodes` · `graph_stats` · `shortest_path` · `list_prs` · `get_pr_impact` · `triage_prs`
 
 ---
 
-## 6. Query Vocabulary Expansion Protocol
+## 4. Artifacts in `graphify-out/`
 
-Before executing `strategic query` or querying the MCP server, apply the vocabulary expansion protocol to prevent zero-hit queries caused by lexical mismatch:
-1. Extract vocabulary tokens from `topology-out/.vocab.txt`.
-2. Map natural language query terms to exact graph vocabulary tokens (e.g., map "authentication" to `auth`, `login`, `token`).
-3. Construct the expanded query string from verified tokens only. Do not invent tokens absent from the graph vocabulary.
-4. Execute BFS traversal for structural overviews or DFS traversal for dependency chains.
+| File | Use |
+|---|---|
+| `GRAPH_REPORT.md` | **Read first (L0/L2).** God nodes, surprising connections, communities, suggested questions |
+| `graph.json` | Node-link graph. Don't load it whole into context; query via the CLI |
+| `.graphify_analysis.json` | Community membership, cohesion, hub ranks |
+| `.graphify_labels.json` | Community id → human name |
+| `.vocab.txt` | Label vocabulary for query expansion |
+| `memory/`, `reflections/LESSONS.md` | Saved Q&A outcomes |
+
+---
+
+## 5. Query discipline
+
+1. **Report before query.** If `GRAPH_REPORT.md` answers it, stop there.
+2. **Vocabulary expansion before concluding "not found".** `rg -i -w "<term>" graphify-out/.vocab.txt` (or grep the stem) → rerun with terms that actually exist (e.g. "authorization" → `guard`, `policy`, `permission`).
+3. **BFS for "what's around X", DFS (`--dfs`) for "how does A reach B".** Always set `--budget` (start 1500).
+4. **Graphify finds; CodeGraph proves.** Treat graphify code edges as navigation. For exact call sites and line numbers, confirm with `codegraph_explore`/`callers` when available.
+5. Doc→code edges from semantic extraction are usually `INFERRED`. Cite the doc path and the code symbol, and keep the tag.
+
+---
+
+## 6. Noise filters for rankings
+
+Exclude from god-node / hotspot claims: stdlib and framework types (`object`, `dict`, `String`, `React`), logging/util hubs (`logger`, `utils`), generated files, vendored dirs, and test fixtures. State what you filtered.

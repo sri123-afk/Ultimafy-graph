@@ -1,177 +1,119 @@
-# Ultima-Graph Output Templates & Formats
+# Output Templates
 
-This reference defines the required output templates for all responses generated under the ultima-graph protocol. Every substantive response must strictly adhere to these structured markdown schemas.
-
----
-
-## Universal Response Structure
-
-Every technical response must follow this 5-part order:
-1. **Direct Answer:** Immediate, concise technical response.
-2. **Cited Evidence:** Exact pointers to node IDs, files, line numbers, and relationships.
-3. **Confidence & Gaps:** Confidence tags (`EXTRACTED`, `INFERRED`, `AMBIGUOUS`), assumptions, and unverified areas.
-4. **Business Impact:** Commercial, operational, or release risk consequences (omitted only for trivial single-line lookups).
-5. **Cost Footer:** Ladder rung(s) used, files read vs. avoided, LLM calls, and token metrics.
+Load when producing a structured deliverable. Size the output to the question (SKILL §7): a lookup never needs a template. Drop any section with nothing real to put in it. Never pad with placeholders.
 
 ---
 
-## Template 1: Direct Code Lookup Answer
-
+## T1 Lookup
 ```markdown
-### Answer
-[Concise 1-3 sentence direct answer to the query.]
+[1–3 sentence answer.] `[Symbol]` (`path:Lstart-Lend`)[, called from `path:L`].
+```
+Add a confidence note only if not `EXTRACTED`.
 
-### Implementation Evidence
-* **Component:** `[SymbolName]` ([Kind: Function/Class/Interface])
-* **Source Location:** `[path/to/file.ext:Lstart-Lend]`
-* **Exported / Visibility:** `[Yes/No]` | `[Public/Private]`
-* **Signature:**
-```[language]
-[verbatim code snippet]
+## T2 Call flow
+```markdown
+**[Source] → [Sink]: [N] hops**
+1. `[Entry]` (`a.ts:L22`) → calls [EXTRACTED]
+2. `[Middleware]` (`b.ts:L45`) → route [INFERRED: POST /api/orders]
+3. `[Handler]` (`c.py:L110`) → calls [EXTRACTED]
+4. `[Repo.save]` (`d.py:L78`)
+
+Weakest hop: 2→3 (falsified if a proxy rewrites `/api/orders`).
+[Business note only if relevant: critical path / sync DB call in request loop.]
 ```
 
-### Confidence & Verification
-* **Confidence Rating:** `EXTRACTED`
-* **Evidence Source:** Deterministic AST Index (Node ID: `[node_id]`)
-* **Unverified Scope:** [e.g., Runtime environment variables or database schema migrations]
-
-### Business Impact
-* **Functional Role:** [e.g., Core customer payment authentication entrypoint]
-* **Failure Exposure:** Failure in this method breaks the customer checkout flow.
-
----
-**Cost & Efficiency Footer:** Rung: L1 | Files Read: 0 | Files Avoided: 4 | LLM Calls: 0 | Tokens: ~450 (measured)
-```
-
----
-
-## Template 2: End-to-End Call Flow Report
-
+## T3 Impact
 ```markdown
-### Call Flow Overview
-Traced execution flow from `[Source]` to `[Terminal Sink]`: [N] hops identified.
+**Changing `[X]` (`path:L`): [LOW|MODERATE|HIGH|CRITICAL]** (basis: [N] prod callers, [K] packages, [hub? y/n])
 
-### Flow Path Trace
-1. **`[Entrypoint]`** (`[file1.ts:L22]`)
-   └── `calls` [EXTRACTED] ──>
-2. **`[Middleware / Validator]`** (`[file2.ts:L45]`)
-   └── `navigates / references` [INFERRED] ──>
-3. **`[Controller Action]`** (`[file3.py:L110]`)
-   └── `calls (tier)` [INFERRED: Cross-Tier HTTP Route] ──>
-4. **`[Database Repository]`** (`[file4.py:L78]`)
-
-### Confidence & Edge Evidence
-* Hop 1 -> 2: `EXTRACTED` via direct AST function invocation.
-* Hop 2 -> 3: `INFERRED` via framework route mapping (`POST /api/v1/orders`).
-* Hop 3 -> 4: `EXTRACTED` via repository method call.
-
-### Falsification Condition
-Flow would be severed if an intermediate API gateway rewrites the `/api/v1/orders` URL path before reaching the backend controller.
-
-### Business Consequence
-* **Critical Path:** Yes (Directly touches transaction processing).
-* **Latency Exposure:** Database query at Hop 4 runs synchronously inside request loop.
-
----
-**Cost & Efficiency Footer:** Rung: L1 | Files Read: 0 | Files Avoided: 11 | LLM Calls: 0 | Tokens: ~680 (measured)
-```
-
----
-
-## Template 3: Impact & Blast Radius Report
-
-```markdown
-### Impact Assessment: `[TargetSymbol]`
-Modifying `[TargetSymbol]` (`[file:line]`) carries an overall impact rating of `[LOW / MODERATE / HIGH / CRITICAL]`.
-
-### Blast Radius Hierarchy
-* **Direct Callers (Depth 1):** [N] components
-  * `[CallerSymbol1]` (`[file1.ts:L34]`)
-  * `[CallerSymbol2]` (`[file2.ts:L89]`)
-* **Transitive Downstream Callers (Depth 2-3):** [M] components across [K] distinct files
-* **Functional Communities Impacted:** `[Community A (Billing)]`, `[Community B (Notifications)]`
-
-### Regression Risk & Test Scope
-* **Direct Unit Test Specs:** [N] test files cover this symbol directly.
-* **Transitive Test Impact:** Run `tactical affected` on modified files.
-* **Full Regression Trigger:** `[YES / NO]` (Triggered because inbound caller count exceeds 15).
-
-### Business Risk & Rollback
-* **Downside of Regression:** Outage in billing notifications; customer support escalation.
-* **Reversal Cost:** Moderate (requires deploying patch to 2 dependent microservices).
-
----
-**Cost & Efficiency Footer:** Rung: L1 | Files Read: 0 | Files Avoided: 16 | LLM Calls: 0 | Tokens: ~820 (measured)
-```
-
----
-
-## Template 4: Selective Test Execution Report
-
-```markdown
-### Selective Test Execution Plan
-Git Diff: `[base]...[head]` ([N] files modified)
-
-### Required Test Suite (Minimal CI Gate)
-| Test Spec Path | Runner | Dependency Type | Rationale |
+| Depth | Prod callers | Test callers | Packages |
 |---|---|---|---|
-| `tests/unit/payment.test.ts` | Vitest | Direct | Covers modified `PaymentService.charge` |
-| `tests/integration/order.test.ts` | Vitest | Transitive | Inbound caller of `PaymentService` |
-| `e2e/checkout.spec.ts` | Playwright | Route Boundary | Exercises modified `/api/checkout` endpoint |
+| 1 | n | n | … |
+| 2 | n | n | … |
 
-### Test Reduction Metrics
-* **Total Repository Test Specs:** 48 specs
-* **Targeted Minimal Gate:** 3 specs
-* **Test Avoidance Ratio:** 93.8% of test suite safely bypassed for this commit.
-
-### Full Regression Mandate
-* **Verdict:** NOT MANDATED (Modified symbols exhibit localized blast radius < 5 callers).
-
----
-**Cost & Efficiency Footer:** Rung: L1 | Files Read: 0 | Files Avoided: 45 | LLM Calls: 0 | Tokens: ~410 (measured)
+Notable callers: `[C1]` (`f:L`), `[C2]` (`f:L`)
+Non-AST refs (rg): [strings/configs or "none"]
+Tests: [affected list] · Full regression: [yes/no + rule]
+Risk: [user journey affected] · Reversal: [two-way/one-way]
 ```
 
----
-
-## Template 5: Architecture Audit & Technical Debt Report
-
+## T4 Selective tests
 ```markdown
-### Architecture Audit Summary
-**Target Codebase:** `[Repository Name]` | **Topology Model:** Leiden Community Clustering
+Diff `[base]...[head]`: [N] files → [M] tests
+| Test | Runner | Why |
+|---|---|---|
+Run: `[exact command]`
+Full regression: [verdict + rule] · Coverage gaps: [changed files with 0 tests]
+```
 
-### High-Centrality Architectural Hubs ("God Nodes")
-| Rank | Component Identifier | Degree Centrality | Subsystem Role | Systemic Risk |
+## T5 Architecture audit
+```markdown
+**Bottom line:** [1 sentence]
+| # | Hotspot | Callers/degree | Churn 12m | Top-author % | Why it matters |
+|---|---|---|---|---|---|
+Surprising connections: `[A]` → `[B]` [tag] (why it's a smell)
+Cycles: [N groups or "none" / "not checked: unsupported"]
+Noise filtered: [what was excluded]
+Backlog: P1 … (effort range) · P2 …
+Needs human review: [AMBIGUOUS items]
+```
+
+## T6 Onboarding map
+```markdown
+**What it is:** [1–2 sentences]
+Entry points: `[cmd/route]` → `[symbol]` (`path:L`)
+Core modules: [name: responsibility] ×3–6
+Data & externals: [DBs, queues, third-party APIs]
+How a request flows: [3–5 step trace]
+Start here for a first change: [file + why]
+Gotchas: [generated code, env flags, unusual build]
+```
+
+## T7 Refactor plan
+```markdown
+Goal · Boundary (inbound edges: N) · Seam: [adapter/facade]
+| Step | Change | Builds green? | Tests | Rollback |
 |---|---|---|---|---|
-| 1 | `AppContainer` (`src/core/container.ts`) | 48 edges | Dependency Injection | Single point of failure for all services |
-| 2 | `DatabaseClient` (`src/db/client.py`) | 39 edges | Data Persistence | Unmitigated connection leak exposure |
-
-### Cross-Community Couplings ("Surprising Connections")
-* `PaymentGateway` (`src/payment.ts`) directly imports `AdminDashboardView` (`src/admin/view.tsx`) [Confidence: `EXTRACTED`].
-  * *Architectural Smell:* Core financial engine coupled directly to internal UI layer.
-
-### Modularity & Cohesion Metrics
-* **Average Cluster Cohesion:** `0.58` (Moderate; target > 0.70).
-* **Circular Dependencies:** [N] cycles detected via `tactical cycles`.
-
-### Prioritized Remediation Roadmap
-1. **P1 (Immediate):** Decouple `PaymentGateway` from `AdminDashboardView` via shared event bus.
-2. **P2 (Near-Term):** Split `AppContainer` into modular per-domain service providers.
-
----
-**Cost & Efficiency Footer:** Rung: L2 | Files Read: 2 (range-bound) | Files Avoided: 60+ | LLM Calls: 0 | Tokens: ~1,450 (measured)
+| 0 | Break cycle: extract types → leaf | | | |
+Door type: two-way/one-way · Flag: [name/none] · Decision record: [link/inline]
 ```
 
----
-
-## Template 6: Standard Cost Footer
-
+## T8 Dead-code audit
 ```markdown
----
-**Cost & Efficiency Footer:**
-* **Execution Rungs:** L1 (Tactical Explore) -> L3 (Targeted Range Read: lines 45-80)
-* **Files Directly Opened:** 1 (Targeted Range)
-* **Files Avoided via Index:** 18
-* **LLM Calls:** 0
-* **Tokens In/Out:** ~740 / ~210 (measured)
-* **Escalation Rationale:** L3 accessed to verify conditional database rollback guard on line 65.
+| Symbol | File:L | Index callers | rg hits (non-def) | Dynamic risk | Verdict |
+|---|---|---|---|---|---|
+| | | 0 | 0 | none | Delete (EXTRACTED) |
+| | | 0 | 2 (config) | yes | Keep / deprecate (AMBIGUOUS) |
+Public exports excluded unless consumers checked.
 ```
+
+## T9 Docs drift ledger
+```markdown
+| Doc claim (doc:L) | Code reality (path:L) | Status | Tag | Fix |
+|---|---|---|---|---|
+| `--verbose` flag | not in CLI parser | missing in code | EXTRACTED | remove from docs |
+Summary: [X match / Y drift / Z missing / W undocumented]
+```
+
+## T10 Cost report
+```markdown
+Tasks [N] · Rungs: L0 a, L1 b, L2 c, L3 d, L4 e, L5 f · Range reads [n] · Files avoided [n] · LLM calls [n]
+Tokens: [in/out] ([measured|~est]) · Escalations: [rung: reason]
+```
+
+## T11 Client proposal / estimate
+```markdown
+**Request:** [plain language]
+**Estimate:** [low–high] eng-days · Confidence: [H/M/L]
+Basis: [files N, prod callers N, packages N, tests to update N, unknown systems N]
+Assumptions (each widens the range if false): 1. … 2. …
+Narrowing spikes: [spike → new range]
+Risks to users during delivery: [journeys, mitigation]
+Out of scope: […]
+```
+
+---
+
+## Cost footer (optional, one line)
+Use on multi-step investigations or when asked:
+`Rungs L1→L3 · 1 range read · ~9 files avoided · 0 LLM calls · tokens ~est`

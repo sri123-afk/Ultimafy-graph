@@ -1,109 +1,97 @@
-# Tactical Engine Playbook: Deterministic Code Intelligence
+# Tactical Engine Playbook: CodeGraph
 
-This playbook defines operational procedures for the local deterministic code intelligence engine (CLI: `tactical`, MCP tool: `tactical_explore`). Load this playbook whenever performing single-retrieval code lookups, call flow extraction, blast-radius analysis, circular import detection, or selective test impact mapping.
+Load when doing symbol lookups, call-flow tracing, impact/blast radius, affected tests, or editing code with structure in view.
 
----
-
-## 1. Engine Core & Architectural Role
-
-The tactical engine is a 100% deterministic, local-first code indexer. It parses source code using compiled Tree-sitter grammars (Rust kernel for 20 core languages, portable TypeScript engine for 14+ others) into an embedded SQLite database (`.ultima/tactical.db`).
-
-### Primary Objectives
-1. **Displace Read and Grep loops:** Replace dozens of exploratory file reading round-trips with a single structured retrieval call.
-2. **Surface Verbatim Line-Numbered Source:** Return code formatted as `<line_number>\t<source_line>`, identical to the native Read tool, safe for direct editing.
-3. **Trace Dynamic Dispatch:** Traverse call chains across framework routes, client-server network tiers, mobile bridges, and parameter flows that lexical grep cannot follow.
+Upstream: [github.com/colbymchenry/codegraph](https://github.com/colbymchenry/codegraph) · npm `@colbymchenry/codegraph` · verified against v1.6.x. Run `codegraph <cmd> --help` if a flag errors; the CLI evolves.
 
 ---
 
-## 2. Real Tool Names, MCP Interface & Environment Controls
+## 1. What it is
 
-### Primary MCP Tool
-* **`tactical_explore`**: The primary Read-equivalent tool.
-  * **Input:** Natural-language question or a bag of symbol and file names (e.g., `PaymentService processOrder checkout.ts`).
-  * **Output:** Verbatim line-numbered source of matching symbols grouped by file, plus call paths connecting them, and blast-radius summaries of inbound/outbound callers.
-  * **Session Deduplication:** If `TACTICAL_EXPLORE_DEDUP=1` is set, symbols previously sent in the conversation context are referenced back rather than re-emitted, saving context window space.
+A local, deterministic Tree-sitter indexer (30+ languages) writing a SQLite graph to `.codegraph/codegraph.db`. No LLM, no network. A file watcher keeps the index ~1s behind writes while the MCP server/daemon runs.
 
-### Optional Secondary MCP Tools (Unlisted by Default)
-To expose secondary tools, set environment variable:
-```bash
-export TACTICAL_MCP_TOOLS=explore,node,search,callers,callees,impact,files,status
-```
-* `tactical_node`: Detailed source and caller trail for a specific symbol or whole file.
-* `tactical_search`: FTS5 full-text symbol search across the codebase.
-* `tactical_callers`: Inbound caller tree for a given symbol.
-* `tactical_callees`: Outbound callee tree for a given symbol.
-* `tactical_impact`: Recursive dependency blast-radius evaluation.
-* `tactical_files`: Structural file tree inspection.
-* `tactical_status`: Index health, node/edge counts, and pending sync status.
+It resolves edges that grep cannot follow: framework routes → handlers, client `fetch`/`axios` → backend routes, client routers (`router.push`, `<Link>`), Tauri `invoke` → `#[tauri::command]`, React Native/Swift native bridges, and parameter-flow dispatch to concrete classes.
 
 ---
 
-## 3. Real CLI Commands & Verified Flags
+## 2. MCP surface
 
-Execute these commands when operating in terminal environments:
+- **Default exposed tool: `codegraph_explore` only.** It takes a natural-language question **or** a bag of symbol/file names (`"PaymentService processOrder checkout.ts"`). It returns verbatim `<n>\t<line>` source grouped by file (safe to `Edit` from), plus call paths and caller/callee summaries.
+- More tools (`codegraph_node`, `_search`, `_callers`, `_callees`, `_impact`, `_files`, `_status`, `_context`) exist but are hidden unless `CODEGRAPH_MCP_TOOLS=explore,node,callers,...` is set. Don't assume they're present: check the tool list. The CLI equivalents always work.
+- `CODEGRAPH_EXPLORE_DEDUP=1` lets the server reference source it already sent instead of re-sending it. Enable it only on hosts with one durable context per connection, because it is unsafe after compaction or in subagents.
+- **Subagents don't get the MCP instructions.** Tell them: "use `codegraph explore '<symbols>'` via Bash instead of Read/Grep".
+
+### Using `codegraph_explore` well (token rules)
+1. Pass **all** relevant names in one call (source + sink + suspected middle). One call beats N.
+2. Prefer exact identifiers from the user/error message over prose. Prose works but returns broader context.
+3. Don't follow up with `Read`/`rg` to "double-check" what explore returned verbatim. It *is* the file content.
+4. Use `--max-files N` (CLI) to cap output on broad questions.
+
+---
+
+## 3. CLI reference (verified)
 
 ```bash
-# 1. Project Initialization & Indexing
-tactical init [path]             # Initialize index and build complete index in one pass
-tactical index [path]            # Force full re-index (--force, --quiet)
-tactical sync [path]             # Incremental synchronization of modified files
-tactical status [path]           # Show index statistics and pending sync files (--json, --strict)
-tactical unlock [path]           # Clear stale lockfile blocking index writes
+# Setup / health
+codegraph init [path]                  # create .codegraph/ and build index (one-time)
+codegraph sync [path]                  # incremental update (L4)
+codegraph index [path]                 # full rebuild (L6)
+codegraph status [path] [--json]       # node/edge counts, pending changes
+codegraph unlock [path]                # clear stale lock
+codegraph install -y -t auto           # wire MCP into detected agents (global)
 
-# 2. Querying & Symbol Navigation
-tactical explore "<query>"       # Verbatim source + call paths + blast radius (CLI equivalent of MCP tool)
-tactical node <symbol|file>      # Symbol body + callers or line-numbered file contents
-tactical query <search>          # Search symbol names via FTS5 (--kind <k>, --limit <n>, --json)
-tactical callers <symbol>        # Inbound callers (--limit <n>, --json)
-tactical callees <symbol>        # Outbound callees (--limit <n>, --json)
-tactical impact <symbol>         # Recursive impact analysis (--depth <n>, --json)
-tactical implementations <type>  # Types extending or implementing a class/interface (--depth <n>, --json)
+# Retrieval (L1)
+codegraph explore "<query...>" [--max-files N]   # = codegraph_explore
+codegraph node <symbol> [-f file]                # one symbol: source + caller/callee trail
+codegraph node -f <file> --offset N --limit M    # line-numbered file slice (+dependents)
+codegraph node -f <file> --symbols-only          # just the symbol map of a file (cheap outline)
+codegraph query <search> [-k function|class|...] [-l N] [--json]   # FTS symbol search
+codegraph context "<task>" [-n N] [--no-code]    # task-oriented bundle; --no-code = structure only
+codegraph files                                  # indexed file tree
 
-# 3. Quality & Impact Analysis
-tactical affected [files...]     # Transitively maps changed files to affected test files
-git diff --name-only | tactical affected --stdin --quiet   # Pipe git diff directly to affected tests
-tactical cycles [path]           # Detect circular import dependencies between files (exits 1 on cycles)
+# Graph analysis (L1)
+codegraph callers <symbol> [-f file] [-l N] [--json]
+codegraph callees <symbol> [-f file] [-l N] [--json]
+codegraph impact  <symbol> [-f file] [-d DEPTH=2] [--json]
+codegraph affected [files...] [--stdin] [-d DEPTH=5] [-f "<test glob>"] [--json] [-q]
+
+# Version-gated (present in newer builds; check detect_tools.sh "features")
+codegraph implementations <type> [--json]        # implementors/subclasses
+codegraph cycles [path] [--json]                 # circular file imports; exit 1 if any
 ```
 
----
+**Not a CLI command:** there is no `codegraph dead-code`. Dead-code candidates come from `callers X` → 0 results, verified by `rg -w` (see workflows.md WF5).
 
-## 4. SQLite Storage Schema & Under-the-Hood Mechanisms
+**Disambiguation:** if a name is overloaded, pass `-f <file-suffix>` to `callers`/`callees`/`impact`/`node`. Results that merge multiple same-named definitions are `AMBIGUOUS` until narrowed.
 
-The database is stored at `.ultima/tactical.db` with SQLite WAL mode. Core tables include:
-
-1. **`nodes`**: Stores code symbols.
-   * Attributes: `id`, `kind`, `name`, `qualified_name`, `file_path`, `language`, `start_line`, `end_line`, `start_column`, `end_column`, `docstring`, `signature`, `visibility`, `is_exported`, `is_async`, `is_static`, `is_abstract`, `return_type`.
-2. **`edges`**: Stores symbol relationships.
-   * Attributes: `source`, `target`, `kind`, `metadata`, `line`, `col`, `provenance`.
-   * Uniqueness constraint: Composite index on `(source, target, kind, IFNULL(line, -1), IFNULL(col, -1))`.
-3. **`nodes_fts`**: Virtual table powered by SQLite FTS5 for sub-millisecond lexical queries.
-4. **`name_segment_vocab`**: Materialized word-segment index splitting identifiers (e.g., `OrderStateMachine` -> `order`, `state`, `machine`). Enables exact matching of conversational terms to code symbols without vector hallucinations.
-5. **`unresolved_refs`**: Tracks dangling calls during indexing, resolved in post-processing passes.
+**Monorepos:** run commands with `-p packages/<svc>` or index per package to keep results focused.
 
 ---
 
-## 5. Dynamic Dispatch & Synthesized Hops
+## 4. Patterns
 
-Static AST parsing stops at file and language boundaries. The tactical engine resolves these boundaries through synthesis passes:
-
-| Boundary Type | Synthesized Edge | Mechanism |
-|---|---|---|
-| **Web Framework Routes** | `references` | Maps route declarations (`@app.get('/users')`, `Route::get()`) to handler methods across 17+ frameworks. |
-| **Client-Side Routers** | `navigates` | Follows `router.push()`, `<Link href="...">`, `redirect()` in Next.js, React Router, SvelteKit, Expo Router. |
-| **Cross-Tier Network** | `calls` (tier) | Connects frontend `fetch('/api/v1/orders')` or `axios` calls directly to backend route handlers. |
-| **Mobile Native Bridges** | `calls` (bridge) | Swift `@objc` selector auto-bridging; React Native `NativeModules` and TurboModules to native ObjC/Kotlin. |
-| **Desktop Native IPC** | `calls` (ipc) | Tauri `invoke('save_config')` mapped directly to Rust `#[tauri::command]`. |
-| **Parameter Flow** | `calls` (flow) | Resolves method calls on abstract parameters to the concrete class instantiated at call sites. |
+| Need | Cheapest call |
+|---|---|
+| Outline a big file before reading | `codegraph node -f path --symbols-only` |
+| Read only one function | `codegraph node <Symbol> -f path` |
+| Find a symbol by fuzzy name | `codegraph query <term> -l 5` |
+| Who calls it (direct) | `codegraph callers <Symbol> -l 50 --json` |
+| Transitive blast radius | `codegraph impact <Symbol> -d 2 --json` (raise to 3 only if depth-2 is small) |
+| Tests for a diff | `git diff --name-only origin/main...HEAD \| codegraph affected --stdin -q` |
+| Tests incl. untracked/staged | `{ git diff --name-only HEAD; git ls-files -o --exclude-standard; } \| codegraph affected --stdin -q` |
 
 ---
 
-## 6. Freshness, Watcher & Staleness Handling
+## 5. Freshness
 
-1. **Auto-Sync:** A native OS file watcher (FSEvents/inotify/ReadDirectoryChangesW) tracks source edits and syncs incrementally after a 2-second debounce window.
-2. **Staleness Warning:** When a query references a file modified inside the debounce window, the response carries a warning banner:
-   ```
-   [STALENESS WARNING] Some files referenced below were edited since the last index sync:
-   - src/services/OrderService.ts (modified 400ms ago)
-   Read these specific files directly for live unsynced changes.
-   ```
-3. **Connect-Time Catch-up:** On agent startup or MCP reconnect, the server verifies `(size, mtime)` hashes across the working tree to absorb changes made while offline.
+- MCP/daemon mode: the watcher syncs automatically. If a response carries a staleness warning for a file, read that file's range directly. Don't trust the line numbers for it.
+- CLI-only usage (no daemon running): run `codegraph sync` after pulls, branch switches, or bulk edits before querying.
+- `detect_tools.sh` reports `fresh: false` when tracked files changed after the DB was written, including uncommitted edits.
+
+---
+
+## 6. Known limits (say these when relevant)
+
+- Reflection, string-built dispatch, DI containers configured in YAML/XML, and event buses with string topics may produce **missing** edges. Treat "0 callers" as a hypothesis until `rg -w` agrees.
+- Generated code (`*.pb.go`, `*.g.dart`, `*_generated.*`, `DO NOT EDIT` banners) inflates counts. Exclude it from god-node and blast-radius rankings.
+- `affected` finds tests by import graph. Tests that hit code only over HTTP (E2E) need the route → spec mapping step.

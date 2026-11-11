@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """
-preflight_estimate.py - Sizing and safety preflight check for ultima-graph.
-Standard library only. Categorizes corpus files, estimates word count,
-and flags token cost and safety thresholds prior to extraction.
+preflight_estimate.py - Sizing, cost and safety preflight for ultima-graph.
+
+Separates CODE (AST-indexed locally, no LLM tokens) from LLM-BOUND files
+(docs, papers, images, media - these cost tokens under L5 semantic extraction),
+flags sensitive files to exclude, and applies the SKILL.md section 5 L5 gate.
+Uses `git ls-files` when inside a repo so .gitignore is respected. Stdlib only.
 """
 
 from __future__ import annotations
+
 import argparse
+import fnmatch
 import json
 import os
-import sys
+import subprocess
 from pathlib import Path
 
 CODE_EXTS = {
@@ -17,141 +22,153 @@ CODE_EXTS = {
     ".go", ".rs", ".java", ".cpp", ".cc", ".cxx", ".c", ".h", ".hpp",
     ".rb", ".swift", ".kt", ".kts", ".cs", ".scala", ".php", ".lua",
     ".zig", ".dart", ".vue", ".svelte", ".astro", ".sql", ".sh", ".bash",
-    ".json", ".yaml", ".yml", ".toml", ".hcl", ".tf"
+    ".ex", ".exs", ".erl", ".hs", ".ml", ".clj", ".r", ".jl", ".m", ".mm",
 }
-DOC_EXTS = {".md", ".mdx", ".txt", ".rst", ".html", ".skill"}
-PAPER_EXTS = {".pdf"}
+CONFIG_EXTS = {".json", ".yaml", ".yml", ".toml", ".hcl", ".tf", ".ini", ".xml", ".gradle", ".properties"}
+DOC_EXTS = {".md", ".mdx", ".txt", ".rst", ".adoc", ".html", ".htm"}
+PAPER_EXTS = {".pdf", ".docx", ".pptx", ".xlsx"}
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
-VIDEO_EXTS = {".mp4", ".mov", ".webm", ".mkv", ".mp3", ".wav", ".m4a"}
+MEDIA_EXTS = {".mp4", ".mov", ".webm", ".mkv", ".mp3", ".wav", ".m4a"}
 
 IGNORE_DIRS = {
-    "node_modules", "vendor", "dist", "build", "target", ".git",
-    ".next", ".nuxt", "Pods", ".venv", "venv", "__pycache__",
-    ".tactical", "topology-out", ".ultima"
+    "node_modules", "vendor", "dist", "build", "target", ".git", ".next", ".nuxt",
+    "Pods", ".venv", "venv", "__pycache__", ".codegraph", "graphify-out", ".ultima",
+    "coverage", ".turbo", ".cache",
 }
+SENSITIVE_GLOBS = [
+    ".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa*", "id_ed25519*",
+    "*credentials*", "*secret*", "*.kdbx", "*.sqlite", "*.db", "*.dump", "*.bak",
+]
+SENSITIVE_DIRS = {"secrets", "customer-data", "customer_data", "pii", "exports", "backups"}
+GENERATED_GLOBS = ["*.pb.go", "*_pb2.py", "*.g.dart", "*.generated.*", "*_generated.*", "*.min.js", "*.lock"]
 
-WARN_FLOOR_WORDS = 50_000
-WARN_CEILING_WORDS = 500_000
-WARN_CEILING_FILES = 500
-MAX_RAW_FILE_BYTES = 50 * 1024 * 1024  # 50 MB safety ceiling
+COMPACT_MAX_SOURCE = 30
+L5_MAX_FILES = 50
+L5_MAX_WORDS = 200_000
+MAX_RAW_FILE_BYTES = 50 * 1024 * 1024
+WORD_SAMPLE_BYTES = 250_000
+
+
+def list_files(root: Path) -> tuple[list[Path], str]:
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-co", "--exclude-standard", "-z"],
+            capture_output=True, check=True, timeout=30,
+        ).stdout
+        files = [root / p for p in out.decode("utf-8", "replace").split("\0") if p]
+        files = [f for f in files if not (set(f.relative_to(root).parts[:-1]) & IGNORE_DIRS)]
+        return files, "git"
+    except (OSError, subprocess.SubprocessError):
+        pass
+    files = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS and not d.startswith(".")]
+        files.extend(Path(dirpath) / f for f in filenames)
+    return files, "walk"
+
+
+def is_sensitive(rel: Path) -> bool:
+    name = rel.name.lower()
+    if any(fnmatch.fnmatch(name, g) for g in SENSITIVE_GLOBS) and not name.endswith((".example", ".sample", ".template")):
+        return True
+    return bool({p.lower() for p in rel.parts[:-1]} & SENSITIVE_DIRS)
 
 
 def analyze_corpus(root: Path) -> dict:
-    categories = {
-        "code": [],
-        "document": [],
-        "paper": [],
-        "image": [],
-        "video": [],
-        "unclassified": []
-    }
-    skipped_large = []
-    total_words = 0
+    files, source = list_files(root)
+    counts = {k: 0 for k in ("code", "config", "document", "paper", "image", "media", "generated", "other")}
+    words = 0
+    sensitive, skipped_large = [], []
 
-    for dirpath, dirnames, filenames in os.walk(root):
-        # Prune ignored directories in place
-        dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS and not d.startswith(".")]
-
-        for fname in filenames:
-            if fname.startswith("."):
-                continue
-            fpath = Path(dirpath) / fname
+    for fpath in files:
+        try:
+            st = fpath.stat()
+        except OSError:
+            continue
+        rel = fpath.relative_to(root)
+        if is_sensitive(rel):
+            sensitive.append(str(rel))
+            continue
+        if st.st_size > MAX_RAW_FILE_BYTES:
+            skipped_large.append({"path": str(rel), "size_mb": round(st.st_size / 1048576, 2)})
+            continue
+        name, ext = fpath.name.lower(), fpath.suffix.lower()
+        if any(fnmatch.fnmatch(name, g) for g in GENERATED_GLOBS):
+            counts["generated"] += 1
+        elif ext in CODE_EXTS:
+            counts["code"] += 1
+        elif ext in CONFIG_EXTS:
+            counts["config"] += 1
+        elif ext in DOC_EXTS:
+            counts["document"] += 1
             try:
-                st = fpath.stat()
+                with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                    words += len(f.read(WORD_SAMPLE_BYTES).split())
             except OSError:
-                continue
+                pass
+        elif ext in PAPER_EXTS:
+            counts["paper"] += 1
+            words += int(st.st_size / 20)  # rough: ~20 bytes/word in PDF/Office
+        elif ext in IMAGE_EXTS:
+            counts["image"] += 1
+        elif ext in MEDIA_EXTS:
+            counts["media"] += 1
+        else:
+            counts["other"] += 1
 
-            if st.st_size > MAX_RAW_FILE_BYTES:
-                skipped_large.append({"path": str(fpath), "size_mb": round(st.st_size / (1024 * 1024), 2)})
-                continue
+    llm_bound_files = counts["document"] + counts["paper"] + counts["image"] + counts["media"]
+    source_files = counts["code"] + counts["config"]
+    needs_consent = llm_bound_files > L5_MAX_FILES or words > L5_MAX_WORDS or counts["media"] > 0
 
-            ext = fpath.suffix.lower()
-            if ext in CODE_EXTS:
-                categories["code"].append(str(fpath))
-            elif ext in DOC_EXTS:
-                categories["document"].append(str(fpath))
-                # Word estimation for docs
-                try:
-                    with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
-                        content = f.read(250_000)  # sample up to 250KB for word count
-                        total_words += len(content.split())
-                except OSError:
-                    pass
-            elif ext in PAPER_EXTS:
-                categories["paper"].append(str(fpath))
-                total_words += int(st.st_size / 20)  # rough heuristic: ~20 bytes per word in PDF
-            elif ext in IMAGE_EXTS:
-                categories["image"].append(str(fpath))
-            elif ext in VIDEO_EXTS:
-                categories["video"].append(str(fpath))
-            else:
-                categories["unclassified"].append(str(fpath))
-
-    total_files = sum(len(fl) for fl in categories.values())
-
-    status = "normal"
-    recommendation = "Proceed with standard L1 deterministic or L2 topological analysis."
-
-    if total_words < WARN_FLOOR_WORDS and total_files < 30:
-        status = "compact"
-        recommendation = "Corpus is compact. In-context L0 reads or lightweight L1 lookups sufficient."
-    elif total_words > WARN_CEILING_WORDS or total_files > WARN_CEILING_FILES:
-        status = "large"
-        recommendation = "Corpus exceeds standard thresholds. Rely strictly on L1 deterministic code index and obtain user consent before L5 multimodal extraction."
+    if source_files < COMPACT_MAX_SOURCE and llm_bound_files < COMPACT_MAX_SOURCE:
+        status, rec = "compact", "Skip indexing; use rg + targeted reads."
+    elif needs_consent:
+        status, rec = "large", ("L5 would send ~{:,} words / {} files to an LLM backend. Get explicit consent; "
+                                "offer --code-only, narrower dirs, or a local backend.").format(words, llm_bound_files)
+    else:
+        status, rec = "normal", "CodeGraph/Graphify code-only indexing is free (local AST). L5 on named docs is fine."
+    if sensitive:
+        rec += f" {len(sensitive)} sensitive file(s) found: add them to .graphifyignore before any L5 run."
 
     return {
         "root": str(root),
-        "total_files": total_files,
-        "estimated_words": total_words,
+        "file_source": source,
         "status": status,
-        "recommendation": recommendation,
-        "breakdown": {
-            "code_files": len(categories["code"]),
-            "document_files": len(categories["document"]),
-            "paper_files": len(categories["paper"]),
-            "image_files": len(categories["image"]),
-            "video_files": len(categories["video"]),
-            "unclassified_files": len(categories["unclassified"]),
-        },
+        "recommendation": rec,
+        "code": {"files": counts["code"], "config_files": counts["config"], "generated_files": counts["generated"],
+                 "llm_tokens": 0},
+        "llm_bound": {"files": llm_bound_files, "estimated_words": words,
+                      "estimated_tokens": int(words * 1.33),
+                      "documents": counts["document"], "papers": counts["paper"],
+                      "images": counts["image"], "media": counts["media"]},
+        "l5_consent_required": needs_consent,
+        "other_files": counts["other"],
+        "sensitive_files": sensitive[:50],
+        "sensitive_count": len(sensitive),
         "skipped_large_files": skipped_large,
     }
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Corpus preflight sizing and threshold check.")
-    parser.add_argument("path", nargs="?", default=".", help="Directory to inspect")
-    parser.add_argument("--json", action="store_true", help="Output pure JSON")
-    args = parser.parse_args()
-
-    target = Path(args.path).resolve()
-    result = analyze_corpus(target)
-
+    ap = argparse.ArgumentParser(description="Corpus preflight: cost split, L5 gate, sensitive files.")
+    ap.add_argument("path", nargs="?", default=".")
+    ap.add_argument("--json", action="store_true", help="Emit JSON")
+    args = ap.parse_args()
+    r = analyze_corpus(Path(args.path).resolve())
     if args.json:
-        print(json.dumps(result, indent=2))
+        print(json.dumps(r, indent=2))
         return
-
-    print("\n# Ultima-Graph Preflight Sizing & Threshold Assessment\n")
-    print(f"- Target Path: {result['root']}")
-    print(f"- Total Detected Files: {result['total_files']:,}")
-    print(f"- Estimated Word Mass: ~{result['estimated_words']:,} words")
-    print(f"- Sizing Assessment: {result['status'].upper()}")
-    print(f"- Protocol Recommendation: {result['recommendation']}\n")
-
-    print("## File Classification Breakdown\n")
-    print("| Category | File Count | Handling Protocol |")
-    print("|---|---|---|")
-    bd = result["breakdown"]
-    print(f"| Code Files | {bd['code_files']} | Deterministic AST indexing (L1) - No LLM Cost |")
-    print(f"| Document Files | {bd['document_files']} | Markdown/Text extraction - Selective L5 |")
-    print(f"| PDF / Papers | {bd['paper_files']} | Structural text conversion - Requires L5 gating |")
-    print(f"| Images | {bd['image_files']} | Vision parsing - Requires explicit approval |")
-    print(f"| Audio / Video | {bd['video_files']} | Whisper transcription - Offline only |")
-    print(f"| Unclassified | {bd['unclassified_files']} | Bypassed by default |")
-
-    if result["skipped_large_files"]:
-        print("\n## Skipped Large Files (>50 MB safety ceiling)\n")
-        for sk in result["skipped_large_files"]:
-            print(f"- {sk['path']} ({sk['size_mb']} MB)")
+    c, l = r["code"], r["llm_bound"]
+    print(f"Preflight: {r['root']} [{r['status'].upper()}] (files via {r['file_source']})")
+    print(f"  Code (local AST, 0 LLM tokens): {c['files']} source, {c['config_files']} config, {c['generated_files']} generated")
+    print(f"  LLM-bound (L5 cost): {l['files']} files: {l['documents']} docs, {l['papers']} papers, "
+          f"{l['images']} images, {l['media']} media, ~{l['estimated_words']:,} words (~{l['estimated_tokens']:,} tokens est)")
+    print(f"  L5 consent required: {'YES' if r['l5_consent_required'] else 'no'}")
+    if r["sensitive_count"]:
+        print(f"  Sensitive (exclude): {r['sensitive_count']}: " + ", ".join(r["sensitive_files"][:10]))
+    for s in r["skipped_large_files"]:
+        print(f"  Skipped >50MB: {s['path']} ({s['size_mb']} MB)")
+    print(f"  → {r['recommendation']}")
 
 
 if __name__ == "__main__":

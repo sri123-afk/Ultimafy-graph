@@ -2,8 +2,8 @@
 """
 cost_ledger.py - Session Cost and Evidence Ledger for ultima-graph.
 Standard library only. Tracks task costs, rung escalations, files read vs avoided,
-and token metrics. Uses cryptographic SHA-256 hash chaining for tamper-evident
-audit trails. Writes to .ultima/ledger.jsonl.
+and token metrics. Uses SHA-256 hash chaining to detect edits, deletions and
+unhashed appends (not proof against an attacker who rewrites the whole file). Writes to .ultima/ledger.jsonl.
 """
 
 from __future__ import annotations
@@ -115,9 +115,11 @@ def cmd_verify(args: argparse.Namespace) -> None:
             recorded_prev = entry.get("prev_hash")
             recorded_hash = entry.get("entry_hash")
 
-            # Backward compatibility for unhashed legacy entries
+            # Unhashed entries break the chain: they could be forged appends.
             if recorded_prev is None or recorded_hash is None:
-                continue
+                print(f"Unhashed entry at line {line_number}: not part of the chain (possible forgery).")
+                corrupted = True
+                break
 
             if recorded_prev != expected_prev:
                 print(f"Chain broken at line {line_number}!")
@@ -151,14 +153,20 @@ def cmd_report(args: argparse.Namespace) -> None:
         return
 
     entries = []
+    skipped = 0
     with open(ledger_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
                 try:
-                    entries.append(json.loads(line))
+                    obj = json.loads(line)
                 except json.JSONDecodeError:
+                    skipped += 1
                     continue
+                if not isinstance(obj, dict) or "entry_hash" not in obj:
+                    skipped += 1
+                    continue
+                entries.append(obj)
 
     if not entries:
         print("Ledger is empty.")
@@ -178,6 +186,8 @@ def cmd_report(args: argparse.Namespace) -> None:
         rungs_count[rung] = rungs_count.get(rung, 0) + 1
 
     print("\n# Ultima-Graph Session Cost & Efficiency Ledger\n")
+    if skipped:
+        print(f"- WARNING: {skipped} malformed/unhashed line(s) excluded. Run `verify`.")
     print(f"- Total Tasks Executed: {total_tasks}")
     print(f"- Files Directly Read: {total_files_read}")
     print(f"- Files Avoided via Index: {total_files_avoided}")
@@ -226,8 +236,10 @@ def cmd_report(args: argparse.Namespace) -> None:
 def cmd_reset(args: argparse.Namespace) -> None:
     ledger_path = Path(args.ledger_path)
     if ledger_path.exists():
-        ledger_path.unlink()
-        print(f"Reset ledger file: {ledger_path}")
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        archive = ledger_path.with_name(f"{ledger_path.stem}.{stamp}.jsonl")
+        ledger_path.rename(archive)
+        print(f"Archived ledger to {archive} (new ledger starts on next record)")
     else:
         print("No active ledger file to reset.")
 
@@ -263,7 +275,7 @@ def main() -> None:
     rec_p.add_argument("--notes", default="", help="Context or rationale notes")
 
     subparsers.add_parser("report", help="Display audit summary report")
-    subparsers.add_parser("reset", help="Clear ledger")
+    subparsers.add_parser("reset", help="Archive current ledger and start fresh")
     subparsers.add_parser("verify", help="Verify cryptographic hash chain integrity")
 
     args = parser.parse_args()

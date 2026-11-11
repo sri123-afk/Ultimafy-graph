@@ -24,6 +24,8 @@
 
 ---
 
+*Likelihood basis: churn, fix-commit count, test coverage (WF15). Impact basis: affected user journeys, prod callers. State both per row.*
+
 ## Detailed Risk Fact Sheets
 
 ### RSK-01: [Component Name]

@@ -4,56 +4,47 @@
 
 Ultima-Graph is an open-source agent skill and operational protocol for AI coding agents (Claude Code, Google Antigravity, Cursor, OpenCode, Codex). It fuses deterministic AST code indexing with multimodal topological network analysis and an executive business translation layer.
 
-> **Architecture Note:** Ultima-Graph is an **instruction and governance protocol layer**. The underlying indexing engines ([CodeGraph](https://github.com/colbymchenry/codegraph) and [Graphify](https://github.com/Graphify-Labs/graphify)) are optional external tools. When they are installed, Ultima-Graph orchestrates them for near-zero token retrievals. When they are absent, Ultima-Graph automatically engages **Degraded Mode**, enforcing strict manual search discipline, targeted line-range reads, deterministic ground-truth verification, and cost-ledger accounting.
+> **Architecture Note:** Ultima-Graph is an **instruction and governance protocol layer**. The indexing engines, [CodeGraph](https://github.com/colbymchenry/codegraph) (tactical: symbols, callers, impact, affected tests) and [Graphify](https://github.com/Graphify-Labs/graphify) (strategic: communities, god nodes, code↔docs graph), are optional external tools. When installed, Ultima-Graph routes questions to them. When absent, it runs in **Degraded Mode** with targeted search discipline.
 
 ---
 
 ## Why Ultima-Graph?
 
-Traditional AI coding agents burn 70% to 88% of their token budget and round-trip latency in iterative `grep`/`glob`/`read` file-crawling loops, frequently hallucinate line coordinates, and describe structural debt in abstract technical jargon that business stakeholders cannot evaluate.
+Unguided coding agents spend much of their token budget and latency on iterative `grep`/`glob`/`read` loops, sometimes cite line numbers that don't exist, and describe structural debt in jargon that stakeholders can't evaluate.
 
 Ultima-Graph solves this with four core pillars:
 
-1. **Token Thrift (The Cost Ladder):** Never read full files when an index or targeted line range is sufficient. Enforces a 7-rung Cost Ladder with an append-only, SHA-256 hash-chained session ledger (`.ultima/ledger.jsonl`).
-2. **Deterministic Ground Truth:** Eliminates infinite validator loops. Validation terminates at non-hallucinating string and syntax matches (`scripts/verify_citations.py`): exact AST nodes, line coordinates on disk, type checks, and test executions.
-3. **Autonomy Tiers & Automatic Escalation:** Calibrates risk into T0 (read-only), T1 (reversible edits), and T2 (shared/irreversible). Automatically halts and escalates when blast radius exceeds thresholds or evidence is ambiguous.
-4. **Executive Translation Layer:** Converts technical metrics (god nodes, high centrality, circular imports) into business outcomes: release risk, downtime exposure, QA overhead, cost of delay, and scoping estimates.
+1. **Token Thrift (The Cost Ladder):** Cheapest sufficient evidence first: context → CodeGraph → Graphify → targeted reads → incremental refresh → (gated) LLM extraction. Optional hash-chained cost ledger for benchmarking.
+2. **Deterministic Ground Truth:** Validation ends at disk, not at another LLM. `scripts/verify_citations.py` checks that cited files exist inside the repo, ranges are in bounds, and symbols/snippets appear there. Negative claims ("unused") need two independent witnesses.
+3. **Autonomy Tiers:** T0 (read-only), T1 (reversible edits), T2 (shared/irreversible, needs human approval). Risky edits are confirmed first; analysis is never blocked.
+4. **Executive Translation Layer:** Turns god nodes, churn × centrality hotspots, blast radius, and cycles into release risk, QA scope, key-person risk, and ranged estimates. Dollar figures only come from inputs you provide.
 
 ---
 
-## Measured Results & Benchmarks
+## What to expect (and how to measure it)
 
-The following metrics reflect measured evaluation runs comparing unguided agent exploration against the Ultima-Graph protocol across representative codebases:
+Ultima-Graph is a protocol, so its savings come from the engines it routes to and from the discipline it enforces (no re-reads, range reads, batched queries, no indexing tiny repos).
 
-| Metric | Traditional Agent (Manual Crawling) | Ultima-Graph Protocol | Measured Improvement |
-|---|---|---|---|
-| **Files Opened per Query** | 14 - 45 full files | 0 - 2 targeted line ranges | **95.8% file avoidance** |
-| **Token Usage (Exploration)** | ~12,500 - 35,000 tokens | 620 - 1,450 tokens | **~88% token reduction** |
-| **Tool Call Round-Trips** | 8 - 18 round-trips | 1 - 2 round-trips | **~85% fewer round-trips** |
-| **Citation Hallucination Rate** | Unverified (slippage common) | 0.0% (fail-closed verification) | **100% verified ground truth** |
-| **Canary False-Acceptance Rate**| N/A | 0.0% (`verify_citations.py --canary`) | **Zero false acceptances** |
+| Lever | Effect |
+|---|---|
+| `codegraph_explore` instead of grep→read loops | One call returns verbatim source plus callers. CodeGraph publishes its own with/without-MCP benchmarks in its README |
+| `GRAPH_REPORT.md` / `graphify query --budget` | Architecture answers from a cached graph instead of reading dozens of files |
+| Proportionate output and gates | No mandatory footers, ledger calls, or verifier runs on trivial answers |
+| Code-only graph refresh (`scripts/update.sh`) | Keeps indexes fresh with zero LLM tokens |
 
-*Baseline measured via `scripts/cost_ledger.py` on real codebase queries.*
+**Measure it on your own repo:** run the same questions with and without the skill, and compare tool calls and tokens (`graphify benchmark`, or `scripts/cost_ledger.py` for per-task logs). Don't trust any number you haven't reproduced, including ours.
 
 ---
 
-## Autonomy Tiers & Escalation Protocol
+## Autonomy Tiers & Gates
 
-To balance safety with efficiency, human sign-off moves from repetitive per-task approvals to policy definition and exception handling:
+| Tier | Scope | Gate |
+|---|---|---|
+| **T0** | Read-only answers, navigation, audits | Citations sound; `verify_citations.py` for written deliverables |
+| **T1** | Reversible edits on a branch | Build + type-check + affected tests green |
+| **T2** | Merge, deploy, migration, deletions, secrets | **Explicit human approval** |
 
-| Tier | Scope | Autonomous Action | Human Sign-Off |
-|---|---|---|---|
-| **Tier 0 (T0)** | Read-only answers, navigation, code explanations, audits | Auto-shipped **only if** `verify_citations.py` passes 100% against disk. | Not required for read-only tasks. |
-| **Tier 1 (T1)** | Reversible code edits on an isolated git branch | Auto-accepted **only if** build, type check, and affected tests are green. | Not required during dev; auto-rollback on failure. |
-| **Tier 2 (T2)** | Irreversible actions (main branch merges, deploys, migrations, deletes, secrets) | Written policy compliance check + hash-chained ledger entry. | **Mandatory human approval** before execution. |
-
-### Automatic Escalation Triggers
-The agent automatically halts and hands off to human operators when:
-* Primary evidence relies strictly on `AMBIGUOUS` confidence tags.
-* Blast radius exceeds **10 direct/indirect consumers** or spans network tiers.
-* Proposed change touches a detected architectural God Node (in-degree > 25).
-* Affected symbols have 0% automated test coverage.
-* Dual-path verification divergence occurs (tactical index and `rg` disagree).
+The agent **asks before editing** (it never refuses to analyze) when a change touches a god node, has a high blast radius, crosses a tier/language boundary, has no covering tests, or rests on `AMBIGUOUS` evidence. Thresholds live in one table in `SKILL.md` §5.
 
 ---
 
@@ -118,11 +109,13 @@ rm /tmp/ultima-graph.tar.gz
 
 ## Degraded Mode (Standalone / Zero-Dependency Mode)
 
-When external indexer binaries are not installed, Ultima-Graph automatically executes **Degraded Mode**:
-* **Manual Search Discipline:** Employs precise `rg -w` and `grep -n` queries; reading full files is strictly prohibited.
-* **Bounded Line Slicing:** Uses targeted line-range reads (`Read L45-L90`) once coordinates are located.
-* **Deterministic Verification:** Validates every citation against source lines using `scripts/verify_citations.py`.
-* **Tamper-Evident Ledger:** Records every task, token count, and rung transition in `.ultima/ledger.jsonl` with SHA-256 hash chaining.
+When neither engine is installed, Ultima-Graph runs in **Degraded Mode**: precise `rg -w` searches, range reads around hits (whole files only when small), lexical evidence tagged `INFERRED`, and one-line install guidance:
+
+```bash
+npm i -g @colbymchenry/codegraph && codegraph install -y -t auto   # CodeGraph + MCP wiring
+uv tool install graphifyy                                          # Graphify (PyPI name has two y's)
+bash scripts/update.sh --init                                      # build both indexes locally, no LLM
+```
 
 ---
 
@@ -136,18 +129,19 @@ ultima-graph/
 ├── NOTICE                                 # Upstream notices
 ├── ATTRIBUTION.md                         # Detailed upstream references and credits
 ├── references/
-│   ├── mode-router.md                     # Intent routing matrix and 12 worked scenarios
-│   ├── tactical-playbook.md               # AST indexing, symbol lookup, and impact analysis
-│   ├── strategic-playbook.md              # Multimodal GraphRAG, clustering, and exports
+│   ├── mode-router.md                     # Intent routing matrix and 14 worked scenarios
+│   ├── tactical-playbook.md               # CodeGraph: verified CLI/MCP, impact, affected tests
+│   ├── strategic-playbook.md              # Graphify: verified CLI/MCP, cost split, clustering, exports
 │   ├── cost-governor.md                   # 7-rung cost ladder, budgets, stop rules, and ledger
 │   ├── logic-protocol.md                  # Evidence chains, confidence tags, and falsification
 │   ├── business-lens.md                   # Technical-to-business metric translation
-│   ├── workflows.md                       # 12 step-by-step standard operating procedures
+│   ├── workflows.md                       # 18 procedures (update, onboarding … bug root-cause, hotspots, upgrades, security flow)
 │   ├── output-templates.md                # Standardized response schemas with fill-in fields
 │   ├── tool-detection-and-fallbacks.md    # Engine setup, MCP configs, and graceful degradation
 │   └── evals.md                           # Verification prompts, pass criteria, and test runs
 ├── scripts/
-│   ├── detect_tools.sh                    # Deterministic engine and index detector (bash)
+│   ├── update.sh                          # "ultima-graph update": refresh stale indexes, no LLM tokens
+│   ├── detect_tools.sh                    # Engine, version, freshness & feature detector (JSON)
 │   ├── cost_ledger.py                     # Session cost, token, and hash-chained ledger (Python stdlib)
 │   ├── verify_citations.py                # Deterministic ground-truth citation verifier (Python stdlib)
 │   ├── preflight_estimate.py              # Ingestion volume and safety threshold checker (Python stdlib)
@@ -162,9 +156,13 @@ ultima-graph/
 
 ## Tooling & Verification Commands
 
-### 1. Detect Installed Engines
+### 1. Detect Engines & Update Indexes
 ```bash
-bash scripts/detect_tools.sh .
+bash scripts/detect_tools.sh .        # JSON: binaries, versions, freshness, stale files
+bash scripts/update.sh --check        # dry run (exit 10 = stale)
+bash scripts/update.sh                # refresh only stale engines (codegraph sync + graphify update)
+bash scripts/update.sh --init         # first-time local index build
+python3 scripts/preflight_estimate.py .   # code vs LLM-bound cost split, sensitive files
 ```
 
 ### 2. Verify Citations (Ground Truth Gate)
